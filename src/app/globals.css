@@ -1,0 +1,807 @@
+/* ImmoCalc — aligned with the ImmoCow product family */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap');
+
+:root {
+  --bg-color: #f8fafc;
+  --bg-gradient: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  --bg-surface: #ffffff;
+  --bg-secondary: #f1f5f9;
+  --text-main: #0f172a;
+  --text-muted: #475569;
+
+  --accent-color: #3b82f6;
+  --accent-color-light: rgba(59, 130, 246, 0.1);
+  --accent-secondary: #2563eb;
+  --accent-gradient: linear-gradient(135deg, #3b82f6, #2563eb);
+
+  --glass-bg: rgba(255, 255, 255, 0.9);
+  --glass-border: #e2e8f0;
+  --glass-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.07), 0 0 3px rgba(15, 23, 42, 0.04);
+
+  --input-required-bg: #eff6ff;
+  --input-required-border: rgba(59, 130, 246, 0.35);
+  --input-required-text: #1d4ed8;
+
+  --input-optional-bg: #f8fafc;
+  --input-optional-border: #e2e8f0;
+  --input-optional-text: #0f172a;
+
+  --output-calc-bg: #f8fafc;
+  --output-calc-border: #dbeafe;
+  --output-calc-text: #1d4ed8;
+  --output-calc-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.05);
+
+  --success-color: #10b981;
+  --danger-color: #ef4444;
+  --warning-color: #f59e0b;
+
+  --radius-card: 16px;
+  --radius-input: 12px;
+  --radius-pill: 999px;
+
+  /* Safe Area */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-color: #0f172a;
+    --bg-gradient: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+    --bg-surface: #1e293b;
+    --bg-secondary: #1e293b;
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --accent-color-light: rgba(96, 165, 250, 0.14);
+
+    --glass-bg: rgba(30, 41, 59, 0.9);
+    --glass-border: #334155;
+    --glass-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.38);
+
+    --input-required-bg: rgba(59, 130, 246, 0.12);
+    --input-required-border: rgba(96, 165, 250, 0.36);
+    --input-required-text: #93c5fd;
+
+    --input-optional-bg: #0f172a;
+    --input-optional-border: #334155;
+    --input-optional-text: #f8fafc;
+
+    --output-calc-bg: #0f172a;
+    --output-calc-border: #334155;
+    --output-calc-text: #93c5fd;
+  }
+}
+
+/* ─── Global Reset & Base ────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg-gradient);
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  min-height: 100vh;
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 15px;
+  line-height: 1.5;
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+  overflow-x: hidden;
+}
+
+/* Prevent iOS zoom on input focus (font-size >= 16px) */
+@supports (-webkit-touch-callout: none) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* ─── App Container ──────────────────────────────────────── */
+.app-container {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 0.9rem;
+  padding-bottom: calc(0.9rem + var(--safe-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* ─── Header ─────────────────────────────────────────────── */
+.header {
+  text-align: center;
+  margin-bottom: 0.5rem;
+  padding: 0.75rem 0 0.25rem;
+  animation: fadeInDown 0.3s ease-out;
+}
+
+.header h1 {
+  font-size: 1.8rem;
+  font-weight: 800;
+  font-family: 'Outfit', 'Inter', sans-serif;
+  letter-spacing: -0.02em;
+  color: var(--text-main);
+  margin-bottom: 0.15rem;
+  line-height: 1.2;
+}
+
+.header p {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+/* ─── Glass Panel (Cards) ────────────────────────────────── */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-card);
+  padding: 1rem;
+  box-shadow: var(--glass-shadow);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.glass-panel:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 8px 26px -6px rgba(15, 23, 42, 0.12);
+}
+
+/* ─── Panel Title ────────────────────────────────────────── */
+.panel-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  letter-spacing: -0.01em;
+}
+
+/* ─── Grid Layout ────────────────────────────────────────── */
+.grid-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+/* ─── Cluster Title (Section Divider) ────────────────────── */
+.cluster-title {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--accent-color);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.4rem;
+  margin-top: 0.75rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--glass-border);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.cluster-title:first-child {
+  margin-top: 0;
+}
+
+/* ─── Calculation Row (Responsive Grid) ──────────────────── */
+.calculation-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
+  align-items: end;
+  margin-bottom: 0.4rem;
+}
+
+@media (min-width: 600px) {
+  .calculation-row {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.6rem;
+  }
+}
+
+/* ─── Dashboard Layout ───────────────────────────────────── */
+.dashboard-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  align-items: start;
+}
+
+@media (min-width: 1024px) {
+  .dashboard-layout {
+    grid-template-columns: 1fr 360px;
+    gap: 1rem;
+  }
+}
+
+/* ─── Results Sticky ─────────────────────────────────────── */
+.results-sticky {
+  position: sticky;
+  top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* ─── Input Group ────────────────────────────────────────── */
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.input-group label {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+}
+
+/* ─── Input Wrapper ──────────────────────────────────────── */
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-wrapper input,
+.input-wrapper select {
+  width: 100%;
+  height: 40px;
+  padding: 0 2.2rem 0 0.7rem;
+  border-radius: var(--radius-input);
+  font-family: 'Inter', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  -webkit-appearance: none;
+  appearance: none;
+  min-height: 44px; /* Touch target */
+  color: inherit;
+}
+
+.input-suffix {
+  position: absolute;
+  right: 0.7rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 0.8rem;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+/* ─── Input Type: Required ───────────────────────────────── */
+.input-required input {
+  background-color: var(--input-required-bg);
+  border: 1px solid var(--input-required-border);
+  color: var(--input-required-text);
+}
+
+.input-required input:focus {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14);
+  border-color: var(--accent-color);
+}
+
+/* ─── Input Type: Optional ───────────────────────────────── */
+.input-optional input {
+  background-color: var(--input-optional-bg);
+  border: 1px solid var(--input-optional-border);
+  color: var(--input-optional-text);
+}
+
+.input-optional input:focus {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14);
+  border-color: var(--accent-color);
+}
+
+/* ─── Output: Calculated Fields ──────────────────────────── */
+.output-calc input {
+  background: var(--output-calc-bg);
+  border: 1px solid var(--output-calc-border);
+  color: var(--output-calc-text);
+  box-shadow: var(--output-calc-shadow);
+  cursor: not-allowed;
+  font-weight: 600;
+}
+
+/* ─── Tabs Container (Pill Style) ────────────────────────── */
+.tabs-container {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+  padding: 0.25rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--glass-shadow);
+}
+
+.tab-button {
+  flex: 1;
+  padding: 0.55rem 0.75rem;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: 'Inter', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  transition: all 0.15s ease;
+  min-height: 44px; /* Touch target */
+  white-space: nowrap;
+}
+
+.tab-button:hover {
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--text-main);
+}
+
+.tab-button.active {
+  background: #0f172a;
+  color: #ffffff;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.16);
+}
+
+.tab-button svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.tab-button.active svg {
+  transform: scale(1.05);
+}
+
+/* ─── Result Cards (Bank Widget Style) ───────────────────── */
+.result-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.75rem;
+  background: var(--bg-surface);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--glass-border);
+  transition: border-color 0.15s ease;
+}
+
+.result-card .label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-bottom: 0.2rem;
+  font-weight: 500;
+}
+
+.result-card .value {
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+/* ─── Value Positive / Negative ──────────────────────────── */
+.value.positive {
+  color: var(--success-color);
+}
+
+.value.negative {
+  color: var(--danger-color);
+}
+
+/* ─── Tooltip System ─────────────────────────────────────── */
+.tooltip-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tooltip-icon {
+  color: var(--accent-color);
+  opacity: 0.65;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.tooltip-container:hover .tooltip-icon,
+.tooltip-container:active .tooltip-icon {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.tooltip-text {
+  visibility: hidden;
+  width: 240px;
+  background: var(--bg-surface);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  color: var(--text-main);
+  text-align: left;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  padding: 0.75rem;
+  position: absolute;
+  z-index: 10000;
+  bottom: 130%;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity 0.15s ease, bottom 0.15s ease;
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.5;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18);
+  pointer-events: auto;
+}
+
+.tooltip-text.is-active {
+  visibility: visible;
+  opacity: 1;
+  bottom: 140%;
+}
+
+/* Tooltip Arrow */
+.tooltip-text::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -6px;
+  border-width: 6px;
+  border-style: solid;
+  border-color: var(--accent-color) transparent transparent transparent;
+}
+
+/* ─── Sync Button ────────────────────────────────────────── */
+.btn-sync {
+  transition: all 0.15s ease !important;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-sync:hover {
+  background: rgba(99, 102, 241, 0.2) !important;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
+  border-color: var(--accent-color) !important;
+}
+
+.btn-sync:active {
+  transform: scale(0.96) !important;
+  background: rgba(99, 102, 241, 0.35) !important;
+}
+
+/* ─── Flash & Synced State ───────────────────────────────── */
+@keyframes flash-green {
+  0% {
+    background-color: rgba(16, 185, 129, 0.35);
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+
+.flash-update {
+  animation: flash-green 0.6s ease-out;
+}
+
+.input-synced input,
+.input-synced select {
+  color: var(--success-color) !important;
+  font-weight: 600 !important;
+}
+
+/* ─── Unit Rent Confirmation ─────────────────────────────── */
+.unit-rent-toggle {
+  min-width: 0;
+  overflow: hidden;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+
+.unit-rent-toggle.has-confirmation {
+  justify-content: space-between !important;
+  gap: 0.2rem !important;
+  padding: 0 0.35rem !important;
+  font-size: 0.8rem !important;
+}
+
+.unit-rent-toggle.has-confirmation > span:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.unit-rent-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  flex: 0 0 calc(8ch + 30px);
+  min-width: calc(8ch + 30px);
+  max-width: calc(8ch + 30px);
+}
+
+.unit-rent-toggle.is-confirmed {
+  border-color: var(--success-color) !important;
+  color: var(--success-color) !important;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.16), 0 8px 18px rgba(16, 185, 129, 0.12);
+}
+
+.unit-rent-check {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: #ffffff;
+  background: var(--success-color);
+  box-shadow: 0 3px 10px rgba(16, 185, 129, 0.28);
+}
+
+.unit-rent-total {
+  min-width: 6ch;
+  max-width: 8ch;
+  overflow: hidden;
+  color: var(--success-color);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  line-height: 1;
+  border: 1px solid var(--success-color);
+  border-radius: 4px;
+  padding: 0.2rem 0.3rem;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.unit-rent-confirmation {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 24px;
+  gap: 0;
+  color: var(--success-color);
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.unit-rent-confirmation.is-active {
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(16, 185, 129, 0.45);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.14);
+}
+
+/* ─── Animations ─────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ─── Spinner Small (OCR Loading) ────────────────────────── */
+.spinner-small {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Custom Range Slider ────────────────────────────────── */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(59, 130, 246, 0.16);
+  outline: none;
+  cursor: pointer;
+  margin: 0.5rem 0;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent-gradient);
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35);
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover,
+input[type="range"]::-webkit-slider-thumb:active {
+  transform: scale(1.15);
+  box-shadow: 0 2px 16px rgba(59, 130, 246, 0.45);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent-gradient);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+  cursor: pointer;
+}
+
+input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(99, 102, 241, 0.15);
+}
+
+/* ─── Checkbox Styling ───────────────────────────────────── */
+input[type="checkbox"] {
+  accent-color: var(--accent-color);
+}
+
+/* ─── Select Arrow Fix ───────────────────────────────────── */
+select {
+  background-image: none !important;
+  cursor: pointer;
+}
+
+/* ─── Scrollbar (Webkit) ─────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--glass-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* ─── Selection Color ────────────────────────────────────── */
+::selection {
+  background: rgba(59, 130, 246, 0.22);
+  color: #ffffff;
+}
+
+/* ─── Focus Visible (Accessibility) ──────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+/* ─── Responsive Fine-Tuning ─────────────────────────────── */
+
+/* Small phones (< 375px) */
+@media (max-width: 374px) {
+  .app-container {
+    padding: 0.5rem;
+  }
+
+  .header h1 {
+    font-size: 1.5rem;
+  }
+
+  .tab-button {
+    font-size: 0.72rem;
+    padding: 0.5rem 0.5rem;
+  }
+
+  .result-card .value {
+    font-size: 1.1rem;
+  }
+}
+
+/* Medium devices (tablets) */
+@media (min-width: 600px) {
+  .app-container {
+    max-width: 680px;
+    padding: 1.25rem;
+  }
+
+  .glass-panel {
+    padding: 1.25rem;
+  }
+}
+
+/* Large screens */
+@media (min-width: 1024px) {
+  .app-container {
+    max-width: 1100px;
+    padding: 1.5rem;
+  }
+
+  .header h1 {
+    font-size: 2.2rem;
+  }
+
+  .glass-panel {
+    padding: 1.5rem;
+  }
+
+  .result-card .value {
+    font-size: 1.5rem;
+  }
+}
+
+/* ─── Reduced Motion ─────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+}

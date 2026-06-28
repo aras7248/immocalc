@@ -1,0 +1,22 @@
+{
+  "name": "ImmoCalc | ImmoCow",
+  "short_name": "ImmoCalc",
+  "description": "Deal-Analyse und Wertermittlung als Teil der ImmoCow Produktfamilie",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8fafc",
+  "theme_color": "#f8fafc",
+  "icons": [
+    {
+      "src": "/logos/immocow-icon-light-v2.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/logos/immocow-icon-light-v2.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

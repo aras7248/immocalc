@@ -1,117 +1,151 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import Image from "next/image";
+import { useState } from "react";
+import { ThemeToggle } from "@/context/ThemeContext";
+import { supabase } from "@/lib/supabase";
+
+function getFriendlyLoginError(message: string) {
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes("invalid login") || normalized.includes("invalid credentials")) {
+    return "E-Mail-Adresse oder Passwort ist falsch. Bitte prüfe deine Eingaben.";
+  }
+
+  if (normalized.includes("email not confirmed")) {
+    return "Bitte bestätige zuerst deine E-Mail-Adresse.";
+  }
+
+  if (normalized.includes("too many") || normalized.includes("rate limit")) {
+    return "Zu viele Anmeldeversuche. Bitte warte einen Moment und versuche es erneut.";
+  }
+
+  return "Die Anmeldung ist gerade nicht möglich. Prüfe deine Verbindung und versuche es erneut.";
+}
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (loading) return;
+
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
+    try {
+      if (!navigator.onLine) {
+        throw new Error("offline");
+      }
 
-    if (error) {
-      setError(error.message);
+      const { error: loginError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+
+      if (loginError) throw loginError;
+    } catch (loginError) {
+      const message = loginError instanceof Error ? loginError.message : "unknown";
+      setError(
+        message === "offline"
+          ? "Keine Internetverbindung. Bitte prüfe dein Netzwerk."
+          : getFriendlyLoginError(message),
+      );
       setLoading(false);
     }
-    // If successful, the AuthContext will automatically redirect to '/'
   };
 
   return (
-    <div className="app-container" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-      <div style={{
-        background: 'var(--glass-bg)',
-        border: '1px solid var(--glass-border)',
-        borderRadius: '24px',
-        padding: '2rem',
-        boxShadow: 'var(--glass-shadow)',
-        backdropFilter: 'blur(18px)',
-        WebkitBackdropFilter: 'blur(18px)',
-        textAlign: 'center'
-      }}>
+    <main className="auth-page">
+      <div className="auth-orb auth-orb--blue" aria-hidden="true" />
+      <div className="auth-orb auth-orb--green" aria-hidden="true" />
 
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.25rem' }}>
-          <img
-            src="/logos/immocow-full-light-v2.png"
-            alt="ImmoCow"
-            style={{ height: 92, width: 'auto', objectFit: 'contain' }}
-          />
+      <section className="auth-card" aria-labelledby="login-title">
+        <div className="auth-card__accent" aria-hidden="true" />
+
+        <div className="auth-card__topline">
+          <span className="auth-badge">Sicherer Login</span>
+          <ThemeToggle compact />
         </div>
 
-        <h1 style={{ fontFamily: 'Outfit, Inter, sans-serif', fontSize: '1.55rem', fontWeight: 800, marginBottom: '0.5rem', letterSpacing: '-0.02em' }}>
-          ImmoCalc
-        </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '2rem' }}>
-          Melde dich an, um auf ImmoCalc und deine gespeicherten Objekte zuzugreifen.
-        </p>
+        <div className="auth-brand" aria-label="ImmoCow ImmoCalc">
+          <Image
+            className="brand-logo brand-logo--light"
+            src="/brand/logo-full.png"
+            alt="ImmoCow"
+            width={160}
+            height={139}
+            priority
+          />
+          <Image
+            className="brand-logo brand-logo--dark"
+            src="/brand/logo-full-white.png"
+            alt=""
+            width={160}
+            height={139}
+            priority
+          />
+          <span className="auth-product-name">ImmoCalc</span>
+        </div>
 
-        <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          
-          <div className="input-wrapper" style={{ flex: 1 }}>
+        <header className="auth-heading">
+          <h1 id="login-title">Willkommen zurück</h1>
+          <p>Analysiere Immobilien, vergleiche Szenarien und sichere deine Kalkulationen.</p>
+        </header>
+
+        <form className="auth-form" onSubmit={handleLogin} aria-busy={loading} noValidate>
+          <div className="auth-field">
+            <label htmlFor="email">E-Mail-Adresse</label>
             <input
+              id="email"
+              name="email"
               type="email"
-              placeholder="E-Mail Adresse"
+              inputMode="email"
+              autoComplete="email"
+              placeholder="name@beispiel.de"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(event) => setEmail(event.target.value)}
               required
-              style={{ padding: '0.9rem', fontSize: '1rem' }}
+              disabled={loading}
             />
           </div>
 
-          <div className="input-wrapper" style={{ flex: 1 }}>
+          <div className="auth-field">
+            <label htmlFor="password">Passwort</label>
             <input
+              id="password"
+              name="password"
               type="password"
-              placeholder="Passwort"
+              autoComplete="current-password"
+              placeholder="Dein Passwort"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(event) => setPassword(event.target.value)}
               required
-              style={{ padding: '0.9rem', fontSize: '1rem' }}
+              disabled={loading}
             />
           </div>
 
           {error && (
-            <div style={{ color: '#ef4444', fontSize: '0.85rem', textAlign: 'left', padding: '0 0.5rem' }}>
+            <p className="auth-message auth-message--error" role="alert">
               {error}
-            </div>
+            </p>
           )}
 
-          <button 
-            type="submit" 
-            disabled={loading}
-            style={{
-              background: 'var(--accent-color)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '16px',
-              padding: '1rem',
-              fontSize: '1rem',
-              fontWeight: 700,
-              cursor: loading ? 'not-allowed' : 'pointer',
-              marginTop: '0.5rem',
-              transition: 'opacity 0.2s',
-              opacity: loading ? 0.7 : 1,
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center'
-            }}
-          >
-            {loading ? <div className="spinner-small"></div> : 'Einloggen'}
+          <button className="auth-submit" type="submit" disabled={loading}>
+            {loading && <span className="spinner-small" aria-hidden="true" />}
+            <span>{loading ? "Anmeldung läuft …" : "Anmelden"}</span>
           </button>
         </form>
 
-        <div style={{ marginTop: '1.5rem', fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', opacity: 0.55 }}>
-          Teil der ImmoCow Familie
+        <div className="auth-trust" aria-label="Sicherheitsmerkmale">
+          <span>DSGVO-Fokus</span>
+          <span>Sichere Cloud-Daten</span>
+          <span>Teil der ImmoCow Familie</span>
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

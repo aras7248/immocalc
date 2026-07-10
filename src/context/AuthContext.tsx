@@ -24,12 +24,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname();
 
   useEffect(() => {
-    // Check active session
+    // Validate the user with Supabase Auth instead of trusting local storage alone.
     const checkSession = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession();
+      const { data: { user: authenticatedUser } } = await supabase.auth.getUser();
       
-      if (session?.user) {
-        setUser(session.user);
+      if (authenticatedUser) {
+        setUser(authenticatedUser);
       } else {
         setUser(null);
         // Force redirect to login if not already there
@@ -71,8 +71,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     <AuthContext.Provider value={{ user, loading, signOut }}>
       {/* Show a very simple loading state to prevent flash of content */}
       {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: 'var(--bg-color)', color: 'var(--text-color)' }}>
-          <div className="spinner-small" style={{ width: '2rem', height: '2rem' }}></div>
+        <div className="auth-loading" role="status" aria-live="polite">
+          <div className="spinner-small" style={{ width: '2rem', height: '2rem' }} aria-hidden="true" />
+          <span className="sr-only">Sitzung wird geprüft …</span>
         </div>
       ) : (
         children

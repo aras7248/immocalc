@@ -1,36 +1,52 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Immocow Immocalc
 
-## Getting Started
+Immocalc ist der Rendite- und Finanzierungsrechner im Immocow-Ökosystem. Die Anwendung kann aktuell eigenständig auf Port `4001` laufen und ist so vorbereitet, dass Rechenlogik, Gestaltung und Datenmodell später in Immocow übernommen werden können.
 
-First, run the development server:
+## Voraussetzungen
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Node.js `>= 22.18`
+- eine Supabase-Instanz mit aktivierter E-Mail-/Passwort-Anmeldung
+- die Tabelle `immocalc_saved_objects` inklusive Row Level Security aus der Immocow-Migration
+
+Lege lokal eine nicht versionierte `.env.local` mit diesen Werten an:
+
+```dotenv
+NEXT_PUBLIC_SUPABASE_URL=https://<projekt>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-key>
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Entwicklung
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Die Anwendung ist anschließend unter [http://localhost:4001](http://localhost:4001) erreichbar.
 
-## Learn More
+## Qualitätssicherung
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run typecheck
+npm run lint
+npm test
+npm run build
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Die Unit-Tests decken Normalrechnung, laufende Kosten, aktuelle Grunderwerbsteuersätze, Cash-on-Cash-Rendite und Rückwärtsrechnung ab.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Rechenmodell
 
-## Deploy on Vercel
+- Der Kaufpreis wird vollständig finanziert.
+- Kaufnebenkosten werden als eingesetztes Eigenkapital behandelt.
+- Instandhaltung, Verwaltung und Rücklage werden vor Cashflow und Cash-on-Cash-Rendite abgezogen.
+- Die Rückwärtsrechnung verwendet dieselben Kosten- und Finanzierungsannahmen wie die Normalrechnung.
+- Die hinterlegten Grunderwerbsteuersätze entsprechen dem Stand 2026 und sollten bei gesetzlichen Änderungen aktualisiert werden.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Die Ergebnisse sind Modellrechnungen und keine Finanz-, Steuer- oder Rechtsberatung.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Zusammenspiel mit Immocow
+
+Branding, Typografie, Farbvariablen, Hell-/Dunkelmodus und PWA-Assets stammen aus dem aktuellen Immocow-Designsystem. Das Datenmodell und die RLS-Regeln bleiben in Immocow die Quelle der Wahrheit.
+
+Der aktuelle Integrationsstand und die noch offenen Übernahmeschritte sind in [docs/immocow-integration.md](docs/immocow-integration.md) beschrieben. Die Kernfunktionen stehen inzwischen zusätzlich als geschützte Immocow-Route unter `/immocalc` bereit.

@@ -2,18 +2,23 @@
   "name": "immocalc",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "scripts": {
     "dev": "next dev --webpack -p 4001",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test src/lib/calculations.test.ts"
   },
   "dependencies": {
-    "@ducanh2912/next-pwa": "^10.2.9",
-    "@supabase/supabase-js": "^2.108.1",
-    "next": "16.1.6",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
+    "@supabase/supabase-js": "2.110.0",
+    "next": "16.2.10",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
     "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
@@ -21,7 +26,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.1.6",
+    "eslint-config-next": "16.2.10",
+    "postcss": "8.5.16",
     "typescript": "^5"
   }
 }

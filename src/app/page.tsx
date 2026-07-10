@@ -205,6 +205,39 @@ const initialRevState: ReverseState = {
   ruecklagePm: "50,00"
 };
 
+const emptyCalcState: CalcState = {
+  objektname: "",
+  anzahlEinheiten: "",
+  kaufpreis: "",
+  bundesland: "NRW",
+  notarProzent: "",
+  hasMakler: false,
+  maklerProzent: "",
+  zins: "",
+  tilgung: "",
+  mietePM: "",
+  mietePA: "",
+  wohnflaeche: "",
+  baujahr: "",
+  instandhaltungQm: "",
+  verwaltungPm: "",
+  ruecklagePm: ""
+};
+
+const emptyRevState: ReverseState = {
+  bundesland: "NRW",
+  notarProzent: "",
+  hasMakler: false,
+  maklerProzent: "",
+  zins: "",
+  tilgung: "",
+  zielMietePA: "",
+  zielMietpreisQm: "",
+  instandhaltungQm: "",
+  verwaltungPm: "",
+  ruecklagePm: ""
+};
+
 const SAVED_OBJECT_SCHEMA_VERSION = 2;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -805,15 +838,17 @@ export default function Home() {
     setQuickPrice(obj.rev.zielMietpreisQm);
   };
 
-  const handleResetData = () => {
-    if (window.confirm("Bist du sicher, dass du alle Eingaben zurücksetzen möchtest?")) {
-      setCalc(initialCalcState);
-      setRev(initialRevState);
-      setSyncedFields({ zins: true, tilgung: true, zielMietePA: true, zielMietpreisQm: true });
+  const handleClearData = () => {
+    if (window.confirm("Möchtest du wirklich alle eingegebenen Werte löschen?")) {
+      setCalc(emptyCalcState);
+      setRev(emptyRevState);
+      setSyncedFields({});
       setMieten([""]);
       setRentIncrease(0);
-      setQuickArea(initialCalcState.wohnflaeche);
-      setQuickPrice(initialRevState.zielMietpreisQm);
+      setQuickArea("");
+      setQuickPrice("");
+      setScanResult(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       setIsFlashActive(true);
       setTimeout(() => setIsFlashActive(false), 800);
     }
@@ -887,15 +922,15 @@ export default function Home() {
           </button>
           <input type="file" ref={fileInputRef} onChange={handleScanImage} accept="image/*" className="sr-only" tabIndex={-1} />
 
-          {/* Reset Button */}
+          {/* Eingaben vollständig leeren */}
           <button
             type="button"
             className="icon-button icon-button--danger app-action--secondary"
-            onClick={handleResetData}
-            title="Daten zurücksetzen"
-            aria-label="Daten zurücksetzen"
+            onClick={handleClearData}
+            title="Alle Werte löschen"
+            aria-label="Alle Werte löschen"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><polyline points="3 3 3 8 8 8"></polyline></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14H6L5 6m3 0V4h8v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
           </button>
 
           {/* Save Button war hier, wurde zu Baujahr verschoben */}

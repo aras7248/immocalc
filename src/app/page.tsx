@@ -2,8 +2,12 @@
 
 import Image from "next/image";
 import { useState, useEffect, useId, useRef } from "react";
+import { ActivePropertyBar } from '@/components/immocalc/ActivePropertyBar';
+import { CalculatorModeTabs, type CalculatorMode } from '@/components/immocalc/CalculatorModeTabs';
+import { PremiumAccessPanel } from '@/components/immocalc/PremiumAccessPanel';
 import { useAuth } from '@/context/AuthContext';
 import { ThemeToggle } from '@/context/ThemeContext';
+import type { PremiumPlanId } from '@/domain/immocalc/premium';
 import {
   calculateReverse,
   calculateStandard,
@@ -328,7 +332,9 @@ export default function Home() {
   const [mietenFeedbackSeen, setMietenFeedbackSeen] = useState(false);
 
   // Tab State
-  const [activeTab, setActiveTab] = useState<'standard' | 'reverse'>('standard');
+  const [activeTab, setActiveTab] = useState<CalculatorMode>('standard');
+  const [selectedPremiumPlan, setSelectedPremiumPlan] = useState<PremiumPlanId>('investor');
+  const [premiumNotice, setPremiumNotice] = useState<string | null>(null);
   const quickRentPotential = parseNumber(calc.wohnflaeche) * parseNumber(rev.zielMietpreisQm);
 
   const activePropertyIsSaved = savedObjects.some((object) => (
@@ -802,6 +808,13 @@ export default function Home() {
     setTimeout(() => setIsFlashActive(false), 800);
   };
 
+  const handlePremiumUnlock = () => {
+    const planName = selectedPremiumPlan === 'investor' ? 'Investor' : 'Professional';
+    setPremiumNotice(
+      `Der ${planName}-Tarif ist für die nächste Phase vorbereitet. Die Buchung wird später über die zentrale ImmoCow-Zahlungsanbindung aktiviert.`,
+    );
+  };
+
   const handleSaveObject = async () => {
     if (isSaving) return;
     if (!user) {
@@ -1134,105 +1147,42 @@ export default function Home() {
         </div>
       )}
 
-      {/* TAB NAVIGATION */}
-      <div className="tabs-container" role="tablist" aria-label="Rechenmodus">
-        <button
-          type="button"
-          role="tab"
-          id="standard-tab"
-          aria-selected={activeTab === 'standard'}
-          aria-controls="standard-panel"
-          className={`tab-button ${activeTab === 'standard' ? 'active' : ''}`}
-          onClick={() => setActiveTab('standard')}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
-          Standard-Rechner
-        </button>
-        <button
-          type="button"
-          role="tab"
-          id="reverse-tab"
-          aria-selected={activeTab === 'reverse'}
-          aria-controls="reverse-panel"
-          className={`tab-button ${activeTab === 'reverse' ? 'active' : ''}`}
-          onClick={() => setActiveTab('reverse')}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
-          Rückwärts-Rechner
-        </button>
-      </div>
+      <CalculatorModeTabs
+        activeMode={activeTab}
+        onModeChange={(mode) => {
+          setActiveTab(mode);
+          setPremiumNotice(null);
+        }}
+      />
 
-      <section className={`active-property${isFlashActive ? ' active-property--flash' : ''}`} aria-labelledby="active-property-title">
-        <div className="active-property__heading">
-          <span id="active-property-title">Aktive Immobilie</span>
-          <button type="button" className="active-property__sync" onClick={syncFromCalcToRev}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
-            Standardwerte übernehmen
-          </button>
-        </div>
+      <ActivePropertyBar
+        objectName={calc.objektname}
+        livingArea={calc.wohnflaeche}
+        purchasePrice={calc.kaufpreis}
+        isSaved={activePropertyIsSaved}
+        isSaving={isSaving}
+        isFlashActive={isFlashActive}
+        onObjectNameChange={(value) => updateCalc("objektname", value)}
+        onLivingAreaChange={(value) => updateCalc("wohnflaeche", value)}
+        onPurchasePriceChange={(value) => updateCalc("kaufpreis", value)}
+        onLivingAreaBlur={() => handleBlurCalc("wohnflaeche")}
+        onPurchasePriceBlur={() => handleBlurCalc("kaufpreis")}
+        onEnterKey={handleEnterKey}
+        onSync={syncFromCalcToRev}
+        onSave={handleSaveObject}
+      />
 
-        <div className="active-property__fields">
-          <label className="active-property__field active-property__field--name">
-            <span>Straße / Objekt</span>
-            <input
-              type="text"
-              value={calc.objektname}
-              onChange={(event) => updateCalc("objektname", event.target.value)}
-              placeholder="z. B. Musterstraße 1"
-              onKeyDown={handleEnterKey}
-            />
-          </label>
-          <label className="active-property__field">
-            <span>Wohnfläche</span>
-            <span className="active-property__input-wrap">
-              <input
-                inputMode="decimal"
-                type="text"
-                value={calc.wohnflaeche}
-                onChange={(event) => updateCalc("wohnflaeche", event.target.value)}
-                onBlur={() => handleBlurCalc("wohnflaeche")}
-                onKeyDown={handleEnterKey}
-              />
-              <span aria-hidden="true">m²</span>
-            </span>
-          </label>
-          <label className="active-property__field">
-            <span>Kaufpreis</span>
-            <span className="active-property__input-wrap">
-              <input
-                inputMode="decimal"
-                type="text"
-                value={calc.kaufpreis}
-                onChange={(event) => updateCalc("kaufpreis", event.target.value)}
-                onBlur={() => handleBlurCalc("kaufpreis")}
-                onKeyDown={handleEnterKey}
-              />
-              <span aria-hidden="true">€</span>
-            </span>
-          </label>
-          <button
-            type="button"
-            className={`active-property__save${activePropertyIsSaved ? ' active-property__save--saved' : ''}`}
-            onClick={handleSaveObject}
-            disabled={isSaving || activePropertyIsSaved}
-            title={activePropertyIsSaved ? "Immobilie ist gespeichert" : "Immobilie speichern"}
-            aria-label={isSaving ? "Immobilie wird gespeichert" : activePropertyIsSaved ? "Immobilie ist gespeichert" : "Immobilie speichern"}
-          >
-            {isSaving ? (
-              <span className="spinner-small" aria-hidden="true" />
-            ) : (
-              <>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
-                {activePropertyIsSaved && (
-                  <span className="active-property__saved-check" aria-hidden="true">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  </span>
-                )}
-              </>
-            )}
-          </button>
-        </div>
-      </section>
+      {activeTab === 'premium' && (
+        <PremiumAccessPanel
+          selectedPlan={selectedPremiumPlan}
+          notice={premiumNotice}
+          onPlanChange={(plan) => {
+            setSelectedPremiumPlan(plan);
+            setPremiumNotice(null);
+          }}
+          onUnlock={handlePremiumUnlock}
+        />
+      )}
 
       {activeTab === 'standard' && (
         <div id="standard-panel" role="tabpanel" aria-labelledby="standard-tab" className="dashboard-layout">

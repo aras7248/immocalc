@@ -1232,7 +1232,6 @@ export default function Home() {
             )}
           </button>
         </div>
-        <p className="active-property__hint">Alle folgenden Kalkulationen verwenden diese Objektdaten.</p>
       </section>
 
       {activeTab === 'standard' && (

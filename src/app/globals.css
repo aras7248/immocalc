@@ -584,12 +584,6 @@ body {
   color: #fff;
 }
 
-.active-property__hint {
-  margin-top: 0.55rem;
-  color: var(--text-muted);
-  font-size: 0.68rem;
-}
-
 @media (max-width: 720px) {
   .active-property__fields {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 48px;

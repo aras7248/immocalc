@@ -190,6 +190,30 @@ test("reverse calculation returns zero affordability for a zero annuity rate", (
   assert.ok(Number.isFinite(result.base.maxPurchasePrice));
 });
 
+test("reverse offer analysis derives the required rent per square meter", () => {
+  const result = calculateReverse({
+    federalState: "NRW",
+    notaryPercent: 2,
+    brokerPercent: 3.57,
+    hasBroker: true,
+    livingArea: 100,
+    maintenancePerSqmMonthly: 0,
+    managementMonthly: 0,
+    reserveMonthly: 0,
+    targetAnnualRent: 100 * 25 * 12,
+    offeredPurchasePrice: 500_000,
+    interestPercent: 4,
+    repaymentPercent: 1.5,
+  });
+
+  closeTo(result.base.maxPurchasePrice, 30_000 / 0.055);
+  closeTo(result.offerAnalysis.requiredAnnualRent, 27_500);
+  closeTo(result.offerAnalysis.requiredMonthlyRent, 27_500 / 12);
+  closeTo(result.offerAnalysis.requiredMonthlyRentPerSqm, 27_500 / 12 / 100);
+  assert.equal(result.offerAnalysis.isAffordableAtTargetRent, true);
+  closeTo(result.offerAnalysis.annualRentGap, -2_500);
+});
+
 test("invalid and negative numeric inputs are normalized defensively", () => {
   assert.equal(normalizeFiniteNonNegative(Number.NaN), 0);
   assert.equal(normalizeFiniteNonNegative(Number.POSITIVE_INFINITY), 0);

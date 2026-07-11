@@ -84,6 +84,8 @@ interface CalcState {
 
 // Interface for reverse calculation
 interface ReverseState {
+  wohnflaeche: string;
+  angebotspreis: string;
   bundesland: string;
   notarProzent: string;
   hasMakler: boolean;
@@ -192,6 +194,8 @@ const initialCalcState: CalcState = {
 };
 
 const initialRevState: ReverseState = {
+  wohnflaeche: "268,00",
+  angebotspreis: "350.000,00",
   bundesland: "NRW",
   notarProzent: "2,00",
   hasMakler: true,
@@ -225,6 +229,8 @@ const emptyCalcState: CalcState = {
 };
 
 const emptyRevState: ReverseState = {
+  wohnflaeche: "",
+  angebotspreis: "",
   bundesland: "NRW",
   notarProzent: "",
   hasMakler: false,
@@ -263,14 +269,23 @@ function parseSavedObjectRow(row: unknown): SavedObject | null {
     ? Math.min(Math.max(payload.rentIncrease, 0), 50)
     : 0;
 
+  const parsedCalc = mergeState(initialCalcState, payload.calc);
+  const parsedRev = mergeState(initialRevState, payload.rev);
+  if (!isRecord(payload.rev) || typeof payload.rev.wohnflaeche !== "string") {
+    parsedRev.wohnflaeche = parsedCalc.wohnflaeche;
+  }
+  if (!isRecord(payload.rev) || typeof payload.rev.angebotspreis !== "string") {
+    parsedRev.angebotspreis = parsedCalc.kaufpreis;
+  }
+
   return {
     id: row.id,
     db_id: row.id,
     date: Number.isNaN(createdAt.getTime())
       ? new Date().toISOString().split("T")[0]
       : createdAt.toISOString().split("T")[0],
-    calc: mergeState(initialCalcState, payload.calc),
-    rev: mergeState(initialRevState, payload.rev),
+    calc: parsedCalc,
+    rev: parsedRev,
     mieten: Array.isArray(payload.mieten)
       ? payload.mieten.filter((entry): entry is string => typeof entry === "string").slice(0, 10)
       : [""],
@@ -281,6 +296,7 @@ function parseSavedObjectRow(row: unknown): SavedObject | null {
 export default function Home() {
   // === STANDARD KALKULATION STATE ===
   const [calc, setCalc] = useState<CalcState>(initialCalcState);
+  const [rev, setRev] = useState<ReverseState>(initialRevState);
 
   const { user, signOut } = useAuth();
   const [mieten, setMieten] = useState<string[]>([""]);
@@ -313,9 +329,7 @@ export default function Home() {
 
   // Tab State
   const [activeTab, setActiveTab] = useState<'standard' | 'reverse'>('standard');
-  const [quickArea, setQuickArea] = useState(initialCalcState.wohnflaeche);
-  const [quickPrice, setQuickPrice] = useState(initialRevState.zielMietpreisQm);
-  const quickRentPotential = parseNumber(quickArea) * parseNumber(quickPrice);
+  const quickRentPotential = parseNumber(rev.wohnflaeche) * parseNumber(rev.zielMietpreisQm);
 
 
   useEffect(() => {
@@ -402,14 +416,8 @@ export default function Home() {
   }, [scanResult]);
 
 
-  // === RÜCKWÄRTSRECHNUNG ===
-  // Startwerte passen zu Standard, werden aber durch updateCalc ohnehin überschrieben, 
-  // sobald oben was geändert wird.
-  const [rev, setRev] = useState<ReverseState>(initialRevState);
-
   // Helper zum Aktualisieren des States (Standard & Synchronisation nach unten)
   const updateCalc = (field: keyof CalcState, value: string | boolean) => {
-    if (field === "wohnflaeche" && typeof value === "string") setQuickArea(value);
     setCalc(prev => {
       const next = { ...prev, [field]: value };
 
@@ -641,24 +649,23 @@ export default function Home() {
   const degCF = degTilgung + cashflowAnteil;
 
   const updateRev = (field: keyof ReverseState, value: string | boolean) => {
-    if (field === "zielMietpreisQm" && typeof value === "string") setQuickPrice(value);
     // Wenn ein Feld manuell geändert wird, verliert es den Synchronisations-Status
     setSyncedFields(prev => ({ ...prev, [field]: false }));
 
     setRev(prev => {
       const next = { ...prev, [field]: value };
 
-      // Synchronisation: Wenn Ziel-m²-Miete geändert wird, berechne Ziel-Jahresmiete
-      if (field === "zielMietpreisQm" && typeof value === "string") {
-        const qm = parseNumber(value);
-        const fl = parseNumber(calc.wohnflaeche);
+      // Fläche und Ziel-m²-Miete bestimmen gemeinsam die Ziel-Jahresmiete.
+      if ((field === "zielMietpreisQm" || field === "wohnflaeche") && typeof value === "string") {
+        const qm = parseNumber(next.zielMietpreisQm);
+        const fl = parseNumber(next.wohnflaeche);
         if (fl > 0) next.zielMietePA = formatAcc(qm * fl * 12);
       }
 
       // Synchronisation: Wenn Ziel-Jahresmiete geändert wird, berechne m²-Miete
       if (field === "zielMietePA" && typeof value === "string") {
         const pa = parseNumber(value);
-        const fl = parseNumber(calc.wohnflaeche);
+        const fl = parseNumber(next.wohnflaeche);
         if (fl > 0) next.zielMietpreisQm = formatAcc(pa / fl / 12);
       }
 
@@ -680,7 +687,8 @@ export default function Home() {
     brokerPercent: parseNumber(rev.maklerProzent),
     hasBroker: rev.hasMakler,
     targetAnnualRent: parseNumber(rev.zielMietePA),
-    livingArea: wohnflaeche,
+    offeredPurchasePrice: parseNumber(rev.angebotspreis),
+    livingArea: parseNumber(rev.wohnflaeche),
     maintenancePerSqmMonthly: parseNumber(rev.instandhaltungQm),
     managementMonthly: parseNumber(rev.verwaltungPm),
     reserveMonthly: parseNumber(rev.ruecklagePm),
@@ -695,6 +703,7 @@ export default function Home() {
   const revMaklerEuro = reverseResult.base.acquisitionCosts.brokerAmount;
   const revKaufpreisNeu = reverseResult.scenario.maxPurchasePrice;
   const revLaufendeKostenPA = reverseResult.operatingCosts.totalAnnual;
+  const revAngebot = reverseResult.offerAnalysis;
 
   // Manuelle Synchronisation
   const syncFromCalcToRev = () => {
@@ -711,11 +720,11 @@ export default function Home() {
       instandhaltungQm: calc.instandhaltungQm,
       verwaltungPm: calc.verwaltungPm,
       ruecklagePm: calc.ruecklagePm,
+      wohnflaeche: calc.wohnflaeche,
+      angebotspreis: calc.kaufpreis,
       zielMietePA: calc.mietePA,
       zielMietpreisQm: syncedTargetPrice
     }));
-    setQuickPrice(syncedTargetPrice);
-
     // Alle synchronisierten Felder markieren
     setSyncedFields({
       bundesland: true,
@@ -727,6 +736,8 @@ export default function Home() {
       instandhaltungQm: true,
       verwaltungPm: true,
       ruecklagePm: true,
+      wohnflaeche: true,
+      angebotspreis: true,
       zielMietePA: true,
       zielMietpreisQm: true
     });
@@ -834,8 +845,6 @@ export default function Home() {
     setRev(obj.rev || rev);
     setMieten(obj.mieten || [""]);
     setRentIncrease(obj.rentIncrease || 0);
-    setQuickArea(obj.calc.wohnflaeche);
-    setQuickPrice(obj.rev.zielMietpreisQm);
   };
 
   const handleClearData = () => {
@@ -845,8 +854,6 @@ export default function Home() {
       setSyncedFields({});
       setMieten([""]);
       setRentIncrease(0);
-      setQuickArea("");
-      setQuickPrice("");
       setScanResult(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       setIsFlashActive(true);
@@ -1779,15 +1786,15 @@ export default function Home() {
                 {/* SCHNELL-MIET-CHECKER INNERHALB DER ZIEL-VORGABE */}
                 <div style={{ marginBottom: '1.5rem' }}>
                   <div className="glass-panel quick-rent-checker">
-                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-color)' }}>Miet-Potenzial Check:</span>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-color)' }}>Miet-Potenzial Check (steuert die Rückwärtsrechnung):</span>
                     <div className="quick-rent-checker__formula">
                       <input
                         aria-label="Fläche für Mietpotenzial"
                         inputMode="decimal"
                         type="text"
                         placeholder="Fläche"
-                        value={quickArea}
-                        onChange={(e) => setQuickArea(e.target.value)}
+                        value={rev.wohnflaeche}
+                        onChange={(e) => updateRev("wohnflaeche", e.target.value)}
                       />
                       <span style={{ fontSize: '0.8rem' }}>m² ×</span>
                       <input
@@ -1795,11 +1802,11 @@ export default function Home() {
                         inputMode="decimal"
                         type="text"
                         placeholder="€/m²"
-                        value={quickPrice}
-                        onChange={(e) => setQuickPrice(e.target.value)}
+                        value={rev.zielMietpreisQm}
+                        onChange={(e) => updateRev("zielMietpreisQm", e.target.value)}
                       />
                       <span style={{ fontSize: '0.8rem' }}>=</span>
-                      <output style={{ fontSize: '0.9rem', color: 'var(--text-main)', fontWeight: 800 }}>{formatAcc(quickRentPotential)} €</output>
+                      <output aria-label="Monatliche Kaltmiete" style={{ fontSize: '0.9rem', color: 'var(--text-main)', fontWeight: 800 }}>{formatAcc(quickRentPotential)} € / Monat</output>
                     </div>
                   </div>
                 </div>
@@ -1829,6 +1836,13 @@ export default function Home() {
                   </div>
                   <div className="calculation-row">
                     <div className="input-group input-required">
+                      <label htmlFor="reverse-living-area">Gesamtwohnfläche</label>
+                      <div className={`input-wrapper ${isFlashActive ? 'flash-update' : ''} ${syncedFields.wohnflaeche ? 'input-synced' : ''}`}>
+                        <input id="reverse-living-area" inputMode="decimal" type="text" value={rev.wohnflaeche} onChange={(e) => updateRev("wohnflaeche", e.target.value)} onBlur={() => handleBlurRev("wohnflaeche")} onKeyDown={handleEnterKey} />
+                        <span className="input-suffix">m²</span>
+                      </div>
+                    </div>
+                    <div className="input-group input-required">
                       <label htmlFor="target-rent-sqm">Miete / m² (Ziel)</label>
                       <div className={`input-wrapper ${isFlashActive ? 'flash-update' : ''} ${syncedFields.zielMietpreisQm ? 'input-synced' : ''}`} style={{ border: '1px solid var(--accent-color)', borderRadius: '8px' }}>
                         <input id="target-rent-sqm" inputMode="decimal" type="text" value={rev.zielMietpreisQm} onChange={(e) => updateRev("zielMietpreisQm", e.target.value)} onBlur={() => handleBlurRev("zielMietpreisQm")} onKeyDown={handleEnterKey} style={{ fontWeight: 700, color: syncedFields.zielMietpreisQm ? 'var(--success-color)' : 'var(--accent-color)' }} />
@@ -1840,6 +1854,21 @@ export default function Home() {
                       <div className={`input-wrapper ${isFlashActive ? 'flash-update' : ''} ${syncedFields.zielMietePA ? 'input-synced' : ''}`}>
                         <input id="target-annual-rent" inputMode="decimal" type="text" value={rev.zielMietePA} onChange={(e) => updateRev("zielMietePA", e.target.value)} onBlur={() => handleBlurRev("zielMietePA")} onKeyDown={handleEnterKey} />
                         <span className="input-suffix">€</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="calculation-row">
+                    <div className="input-group input-optional">
+                      <label htmlFor="reverse-offer-price">Angebotener Kaufpreis</label>
+                      <div className={`input-wrapper ${isFlashActive ? 'flash-update' : ''} ${syncedFields.angebotspreis ? 'input-synced' : ''}`}>
+                        <input id="reverse-offer-price" inputMode="decimal" type="text" value={rev.angebotspreis} onChange={(e) => updateRev("angebotspreis", e.target.value)} onBlur={() => handleBlurRev("angebotspreis")} onKeyDown={handleEnterKey} />
+                        <span className="input-suffix">€</span>
+                      </div>
+                    </div>
+                    <div className="input-group input-optional">
+                      <label>Erforderliche Miete für Angebot</label>
+                      <div className="input-wrapper" style={{ background: 'var(--output-calc-bg)' }}>
+                        <output style={{ padding: '0.75rem', fontWeight: 800, color: 'var(--accent-color)' }}>{formatAcc(revAngebot.requiredMonthlyRentPerSqm)} €/m²</output>
                       </div>
                     </div>
                   </div>
@@ -1971,6 +2000,21 @@ export default function Home() {
                         {formatAcc(revMaxGesamtKaufpreis)} €
                       </span>
                     </div>
+
+                    {revAngebot.offeredPurchasePrice > 0 && (
+                      <div className="result-card" style={{ padding: '1rem', border: `2px solid ${revAngebot.isAffordableAtTargetRent ? 'var(--success-color)' : 'var(--danger-color)'}` }}>
+                        <span className="label">Angebotspreis-Prüfung</span>
+                        <span className="value" style={{ fontSize: '1.35rem', color: revAngebot.isAffordableAtTargetRent ? 'var(--success-color)' : 'var(--danger-color)' }}>
+                          {revAngebot.isAffordableAtTargetRent ? 'Tragfähig' : 'Zielmiete reicht nicht'}
+                        </span>
+                        <small style={{ color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                          Für {formatAcc(revAngebot.offeredPurchasePrice)} € Kaufpreis sind mindestens {formatAcc(revAngebot.requiredMonthlyRentPerSqm)} €/m² bzw. {formatAcc(revAngebot.requiredMonthlyRent)} € Kaltmiete pro Monat erforderlich.
+                        </small>
+                        <small style={{ color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                          Gesamtinvestition inklusive Kaufnebenkosten: {formatAcc(revAngebot.totalInvestment)} €.
+                        </small>
+                      </div>
+                    )}
                   </div> {/* End Hero Vertical */}
 
                   <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)', fontSize: '0.9rem' }}>

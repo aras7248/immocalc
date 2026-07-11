@@ -60,6 +60,7 @@ export interface ReverseCalculationInput
   extends AcquisitionCostParameters,
     OperatingCostParameters {
   targetAnnualRent: number;
+  offeredPurchasePrice?: number;
   interestPercent: number;
   repaymentPercent: number;
   scenarioRentIncreasePercent?: number;
@@ -93,6 +94,7 @@ export interface NormalizedReverseCalculationInput
   extends NormalizedAcquisitionCostParameters,
     NormalizedOperatingCostParameters {
   targetAnnualRent: number;
+  offeredPurchasePrice: number;
   interestPercent: number;
   repaymentPercent: number;
   scenarioRentIncreasePercent: number;
@@ -202,6 +204,18 @@ export interface ReverseCalculationResult {
   operatingCosts: OperatingCostsResult;
   base: ReverseCaseResult;
   scenario: ReverseCaseResult;
+  offerAnalysis: ReverseOfferAnalysisResult;
+}
+
+export interface ReverseOfferAnalysisResult {
+  offeredPurchasePrice: number;
+  acquisitionCosts: AcquisitionCostsResult;
+  totalInvestment: number;
+  requiredAnnualRent: number;
+  requiredMonthlyRent: number;
+  requiredMonthlyRentPerSqm: number;
+  annualRentGap: number;
+  isAffordableAtTargetRent: boolean;
 }
 
 /**
@@ -573,6 +587,9 @@ export function calculateReverse(
     ...acquisitionParameters,
     ...operatingParameters,
     targetAnnualRent: normalizeFiniteNonNegative(input.targetAnnualRent),
+    offeredPurchasePrice: normalizeFiniteNonNegative(
+      input.offeredPurchasePrice ?? 0,
+    ),
     interestPercent: normalizeFiniteNonNegative(input.interestPercent),
     repaymentPercent: normalizeFiniteNonNegative(input.repaymentPercent),
     scenarioRentIncreasePercent: normalizeFiniteNonNegative(
@@ -587,6 +604,15 @@ export function calculateReverse(
     normalizedInput.targetAnnualRent *
       (1 + normalizedInput.scenarioRentIncreasePercent / 100),
   );
+  const offerAcquisitionCosts = calculateAcquisitionCosts(
+    normalizedInput.offeredPurchasePrice,
+    normalizedInput,
+  );
+  const requiredAnnualRent = nonNegativeResult(
+    normalizedInput.offeredPurchasePrice * (annuityPercent / 100) +
+      operatingCosts.totalAnnual,
+  );
+  const requiredMonthlyRent = nonNegativeResult(requiredAnnualRent / 12);
 
   return {
     input: normalizedInput,
@@ -604,5 +630,23 @@ export function calculateReverse(
       operatingCosts,
       annuityPercent,
     ),
+    offerAnalysis: {
+      offeredPurchasePrice: normalizedInput.offeredPurchasePrice,
+      acquisitionCosts: offerAcquisitionCosts,
+      totalInvestment: nonNegativeResult(
+        normalizedInput.offeredPurchasePrice + offerAcquisitionCosts.totalAmount,
+      ),
+      requiredAnnualRent,
+      requiredMonthlyRent,
+      requiredMonthlyRentPerSqm: nonNegativeResult(
+        safeRatio(requiredMonthlyRent, normalizedInput.livingArea),
+      ),
+      annualRentGap: finiteResult(
+        requiredAnnualRent - normalizedInput.targetAnnualRent,
+      ),
+      isAffordableAtTargetRent:
+        normalizedInput.offeredPurchasePrice > 0 &&
+        normalizedInput.targetAnnualRent >= requiredAnnualRent,
+    },
   };
 }

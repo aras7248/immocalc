@@ -425,6 +425,215 @@ body {
   transform: scale(1.05);
 }
 
+/* ─── Active property context ────────────────────────────── */
+.active-property {
+  width: 100%;
+  margin-bottom: 0.75rem;
+  padding: 0.85rem 1rem 0.75rem;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(16px);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.active-property--flash {
+  border-color: color-mix(in srgb, var(--accent-color) 72%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-color) 14%, transparent), var(--glass-shadow);
+}
+
+.active-property__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.65rem;
+}
+
+.active-property__heading > span {
+  color: var(--text-main);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.active-property__sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 32px;
+  padding: 0.3rem 0.55rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent-color);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 750;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.active-property__sync:hover {
+  background: var(--accent-color-light);
+}
+
+.active-property__fields {
+  display: grid;
+  grid-template-columns: minmax(240px, 2fr) minmax(150px, 0.9fr) minmax(180px, 1.1fr) 52px;
+  align-items: end;
+  gap: 0.65rem;
+  width: 100%;
+}
+
+.active-property__field {
+  display: grid;
+  min-width: 0;
+  gap: 0.25rem;
+}
+
+.active-property__field > span:first-child {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
+.active-property__field input {
+  width: 100%;
+  height: 44px;
+  min-width: 0;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--input-optional-border);
+  border-radius: var(--radius-md);
+  outline: none;
+  background: var(--input-optional-bg);
+  color: var(--text-main);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 650;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.active-property__field input:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-color) 14%, transparent);
+}
+
+.active-property__input-wrap {
+  position: relative;
+  display: block;
+}
+
+.active-property__input-wrap input {
+  padding-right: 2.25rem;
+}
+
+.active-property__input-wrap > span {
+  position: absolute;
+  top: 50%;
+  right: 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.active-property__save {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 44px;
+  border: 1px solid var(--accent-color);
+  border-radius: var(--radius-md);
+  background: var(--accent-color-light);
+  color: var(--accent-color);
+  cursor: pointer;
+  transition: transform 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+
+.active-property__save:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--accent-color) 22%, transparent);
+}
+
+.active-property__save--saved,
+.active-property__save--saved:disabled {
+  border-color: var(--success-color);
+  background: color-mix(in srgb, var(--success-color) 14%, var(--card-bg));
+  color: var(--success-strong);
+  cursor: default;
+  opacity: 1;
+}
+
+.active-property__saved-check {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border: 2px solid var(--card-bg);
+  border-radius: 50%;
+  background: var(--success-color);
+  color: #fff;
+}
+
+.active-property__hint {
+  margin-top: 0.55rem;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
+@media (max-width: 720px) {
+  .active-property__fields {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 48px;
+  }
+
+  .active-property__field--name {
+    grid-column: 1 / -1;
+  }
+
+  .active-property__save {
+    width: 48px;
+  }
+}
+
+@media (max-width: 440px) {
+  .active-property {
+    padding: 0.75rem;
+  }
+
+  .active-property__heading {
+    align-items: flex-start;
+  }
+
+  .active-property__sync {
+    max-width: 150px;
+    justify-content: flex-end;
+    line-height: 1.2;
+    text-align: right;
+  }
+
+  .active-property__fields {
+    grid-template-columns: minmax(0, 1fr) 48px;
+  }
+
+  .active-property__field:not(.active-property__field--name) {
+    grid-column: 1 / 2;
+  }
+
+  .active-property__save {
+    grid-column: 2 / 3;
+    grid-row: 3 / 4;
+  }
+}
+
 /* ─── Result Cards (Bank Widget Style) ───────────────────── */
 .result-card {
   display: flex;

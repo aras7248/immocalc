@@ -311,7 +311,6 @@ export default function Home() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<{ kaufpreis?: string, wohnflaeche?: string, mietePM?: string, baujahr?: string } | null>(null);
   const [isFlashActive, setIsFlashActive] = useState(false); // NEU: Flash-Effekt State
-  const [isSaveEffectActive, setIsSaveEffectActive] = useState(false); // NEU: Speicher-Effekt State
   const [isSaving, setIsSaving] = useState(false);
   const [syncedFields, setSyncedFields] = useState<Record<string, boolean>>({}); // NEU: Tracking synchronisierter Felder
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -329,7 +328,13 @@ export default function Home() {
 
   // Tab State
   const [activeTab, setActiveTab] = useState<'standard' | 'reverse'>('standard');
-  const quickRentPotential = parseNumber(rev.wohnflaeche) * parseNumber(rev.zielMietpreisQm);
+  const quickRentPotential = parseNumber(calc.wohnflaeche) * parseNumber(rev.zielMietpreisQm);
+
+  const activePropertyIsSaved = savedObjects.some((object) => (
+    object.calc.objektname.trim() === calc.objektname.trim()
+    && parseNumber(object.calc.wohnflaeche) === parseNumber(calc.wohnflaeche)
+    && parseNumber(object.calc.kaufpreis) === parseNumber(calc.kaufpreis)
+  ));
 
 
   useEffect(() => {
@@ -418,6 +423,21 @@ export default function Home() {
 
   // Helper zum Aktualisieren des States (Standard & Synchronisation nach unten)
   const updateCalc = (field: keyof CalcState, value: string | boolean) => {
+    if (field === "wohnflaeche" && typeof value === "string") {
+      setRev(prev => {
+        const next = { ...prev, wohnflaeche: value };
+        const area = parseNumber(value);
+        if (area > 0) {
+          next.zielMietePA = formatAcc(parseNumber(next.zielMietpreisQm) * area * 12);
+        }
+        return next;
+      });
+    }
+
+    if (field === "kaufpreis" && typeof value === "string") {
+      setRev(prev => ({ ...prev, angebotspreis: value }));
+    }
+
     setCalc(prev => {
       const next = { ...prev, [field]: value };
 
@@ -687,8 +707,8 @@ export default function Home() {
     brokerPercent: parseNumber(rev.maklerProzent),
     hasBroker: rev.hasMakler,
     targetAnnualRent: parseNumber(rev.zielMietePA),
-    offeredPurchasePrice: parseNumber(rev.angebotspreis),
-    livingArea: parseNumber(rev.wohnflaeche),
+    offeredPurchasePrice: parseNumber(calc.kaufpreis),
+    livingArea: parseNumber(calc.wohnflaeche),
     maintenancePerSqmMonthly: parseNumber(rev.instandhaltungQm),
     managementMonthly: parseNumber(rev.verwaltungPm),
     reserveMonthly: parseNumber(rev.ruecklagePm),
@@ -830,8 +850,6 @@ export default function Home() {
 
       setIsSavedObjectsOpen(true);
       setIsObjektInfoOpen(false);
-      setIsSaveEffectActive(true);
-      setTimeout(() => setIsSaveEffectActive(false), 800);
     } catch (e) {
       console.error("Speichern fehlgeschlagen:", e);
       alert("Das Objekt konnte nicht gespeichert werden. Bitte prüfe deine Verbindung und versuche es erneut.");
@@ -842,7 +860,11 @@ export default function Home() {
 
   const handleLoadObject = (obj: SavedObject) => {
     setCalc(obj.calc);
-    setRev(obj.rev || rev);
+    setRev({
+      ...(obj.rev || rev),
+      wohnflaeche: obj.calc.wohnflaeche,
+      angebotspreis: obj.calc.kaufpreis,
+    });
     setMieten(obj.mieten || [""]);
     setRentIncrease(obj.rentIncrease || 0);
   };
@@ -1003,12 +1025,6 @@ export default function Home() {
           </div>
           <div className="calculation-row">
             <div className="input-group input-optional">
-              <label htmlFor="object-name">Objektname</label>
-              <div className="input-wrapper">
-                <input id="object-name" type="text" value={calc.objektname} onChange={(e) => updateCalc("objektname", e.target.value)} placeholder="z.B. Mehrfamilienhaus Mitte" onKeyDown={handleEnterKey} />
-              </div>
-            </div>
-            <div className="input-group input-optional">
               <label htmlFor="unit-count">Anzahl Einheiten</label>
               <div className="input-wrapper">
                 <input id="unit-count" inputMode="numeric" type="text" value={calc.anzahlEinheiten} onChange={(e) => updateCalc("anzahlEinheiten", e.target.value)} placeholder="z.B. 3" onKeyDown={handleEnterKey} />
@@ -1016,29 +1032,8 @@ export default function Home() {
             </div>
             <div className="input-group input-optional">
               <label htmlFor="construction-year">Baujahr</label>
-              <div className="input-wrapper" style={{ display: 'flex', gap: '0.5rem' }}>
-                <input id="construction-year" inputMode="numeric" type="text" value={calc.baujahr} onChange={(e) => updateCalc("baujahr", e.target.value)} onKeyDown={handleEnterKey} style={{ flex: 1 }} />
-                
-                {/* Save Button */}
-                <button
-                  type="button"
-                  onClick={handleSaveObject}
-                  disabled={isSaving}
-                  title="Objekt speichern"
-                  aria-label={isSaving ? "Objekt wird gespeichert" : "Objekt speichern"}
-                  style={{
-                    width: 48, height: 48, borderRadius: 10, flexShrink: 0,
-                    background: isSaveEffectActive ? 'var(--success-color)' : 'var(--glass-bg)', 
-                    border: '1px solid var(--glass-border)',
-                    color: isSaveEffectActive ? '#fff' : 'var(--accent-color)', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'all 0.3s ease', backdropFilter: 'blur(16px)',
-                    boxShadow: isSaveEffectActive ? '0 0 15px var(--success-color)' : 'none',
-                    transform: isSaveEffectActive ? 'scale(1.05)' : 'scale(1)'
-                  }}
-                >
-                  {isSaving ? <span className="spinner-small" aria-hidden="true" /> : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1 2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>}
-                </button>
+              <div className="input-wrapper">
+                <input id="construction-year" inputMode="numeric" type="text" value={calc.baujahr} onChange={(e) => updateCalc("baujahr", e.target.value)} onKeyDown={handleEnterKey} />
               </div>
             </div>
           </div>
@@ -1130,6 +1125,79 @@ export default function Home() {
           Rückwärts-Rechner
         </button>
       </div>
+
+      <section className={`active-property${isFlashActive ? ' active-property--flash' : ''}`} aria-labelledby="active-property-title">
+        <div className="active-property__heading">
+          <span id="active-property-title">Aktive Immobilie</span>
+          <button type="button" className="active-property__sync" onClick={syncFromCalcToRev}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+            Standardwerte übernehmen
+          </button>
+        </div>
+
+        <div className="active-property__fields">
+          <label className="active-property__field active-property__field--name">
+            <span>Straße / Objekt</span>
+            <input
+              type="text"
+              value={calc.objektname}
+              onChange={(event) => updateCalc("objektname", event.target.value)}
+              placeholder="z. B. Musterstraße 1"
+              onKeyDown={handleEnterKey}
+            />
+          </label>
+          <label className="active-property__field">
+            <span>Wohnfläche</span>
+            <span className="active-property__input-wrap">
+              <input
+                inputMode="decimal"
+                type="text"
+                value={calc.wohnflaeche}
+                onChange={(event) => updateCalc("wohnflaeche", event.target.value)}
+                onBlur={() => handleBlurCalc("wohnflaeche")}
+                onKeyDown={handleEnterKey}
+              />
+              <span aria-hidden="true">m²</span>
+            </span>
+          </label>
+          <label className="active-property__field">
+            <span>Kaufpreis</span>
+            <span className="active-property__input-wrap">
+              <input
+                inputMode="decimal"
+                type="text"
+                value={calc.kaufpreis}
+                onChange={(event) => updateCalc("kaufpreis", event.target.value)}
+                onBlur={() => handleBlurCalc("kaufpreis")}
+                onKeyDown={handleEnterKey}
+              />
+              <span aria-hidden="true">€</span>
+            </span>
+          </label>
+          <button
+            type="button"
+            className={`active-property__save${activePropertyIsSaved ? ' active-property__save--saved' : ''}`}
+            onClick={handleSaveObject}
+            disabled={isSaving || activePropertyIsSaved}
+            title={activePropertyIsSaved ? "Immobilie ist gespeichert" : "Immobilie speichern"}
+            aria-label={isSaving ? "Immobilie wird gespeichert" : activePropertyIsSaved ? "Immobilie ist gespeichert" : "Immobilie speichern"}
+          >
+            {isSaving ? (
+              <span className="spinner-small" aria-hidden="true" />
+            ) : (
+              <>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                {activePropertyIsSaved && (
+                  <span className="active-property__saved-check" aria-hidden="true">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  </span>
+                )}
+              </>
+            )}
+          </button>
+        </div>
+        <p className="active-property__hint">Alle folgenden Kalkulationen verwenden diese Objektdaten.</p>
+      </section>
 
       {activeTab === 'standard' && (
         <div id="standard-panel" role="tabpanel" aria-labelledby="standard-tab" className="dashboard-layout">
@@ -1793,8 +1861,8 @@ export default function Home() {
                         inputMode="decimal"
                         type="text"
                         placeholder="Fläche"
-                        value={rev.wohnflaeche}
-                        onChange={(e) => updateRev("wohnflaeche", e.target.value)}
+                        value={calc.wohnflaeche}
+                        onChange={(e) => updateCalc("wohnflaeche", e.target.value)}
                       />
                       <span style={{ fontSize: '0.8rem' }}>m² ×</span>
                       <input
@@ -1836,13 +1904,6 @@ export default function Home() {
                   </div>
                   <div className="calculation-row">
                     <div className="input-group input-required">
-                      <label htmlFor="reverse-living-area">Gesamtwohnfläche</label>
-                      <div className={`input-wrapper ${isFlashActive ? 'flash-update' : ''} ${syncedFields.wohnflaeche ? 'input-synced' : ''}`}>
-                        <input id="reverse-living-area" inputMode="decimal" type="text" value={rev.wohnflaeche} onChange={(e) => updateRev("wohnflaeche", e.target.value)} onBlur={() => handleBlurRev("wohnflaeche")} onKeyDown={handleEnterKey} />
-                        <span className="input-suffix">m²</span>
-                      </div>
-                    </div>
-                    <div className="input-group input-required">
                       <label htmlFor="target-rent-sqm">Miete / m² (Ziel)</label>
                       <div className={`input-wrapper ${isFlashActive ? 'flash-update' : ''} ${syncedFields.zielMietpreisQm ? 'input-synced' : ''}`} style={{ border: '1px solid var(--accent-color)', borderRadius: '8px' }}>
                         <input id="target-rent-sqm" inputMode="decimal" type="text" value={rev.zielMietpreisQm} onChange={(e) => updateRev("zielMietpreisQm", e.target.value)} onBlur={() => handleBlurRev("zielMietpreisQm")} onKeyDown={handleEnterKey} style={{ fontWeight: 700, color: syncedFields.zielMietpreisQm ? 'var(--success-color)' : 'var(--accent-color)' }} />
@@ -1858,13 +1919,6 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="calculation-row">
-                    <div className="input-group input-optional">
-                      <label htmlFor="reverse-offer-price">Angebotener Kaufpreis</label>
-                      <div className={`input-wrapper ${isFlashActive ? 'flash-update' : ''} ${syncedFields.angebotspreis ? 'input-synced' : ''}`}>
-                        <input id="reverse-offer-price" inputMode="decimal" type="text" value={rev.angebotspreis} onChange={(e) => updateRev("angebotspreis", e.target.value)} onBlur={() => handleBlurRev("angebotspreis")} onKeyDown={handleEnterKey} />
-                        <span className="input-suffix">€</span>
-                      </div>
-                    </div>
                     <div className="input-group input-optional">
                       <label>Erforderliche Miete für Angebot</label>
                       <div className="input-wrapper" style={{ background: 'var(--output-calc-bg)' }}>

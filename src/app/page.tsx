@@ -316,6 +316,7 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scanButtonRef = useRef<HTMLButtonElement>(null);
   const scanDialogRef = useRef<HTMLDivElement>(null);
+  const hasManualFederalStateChangeRef = useRef(false);
 
   // UX-Hilfen für Einheiten-Rechner
   const mietenRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -376,6 +377,32 @@ export default function Home() {
     };
     loadFromSupabase();
   }, [user]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const applyLocationDefault = async () => {
+      try {
+        const response = await fetch("/api/location", { cache: "no-store" });
+        if (!response.ok) return;
+
+        const data = await response.json() as { federalState?: string | null };
+        const federalState = data.federalState;
+        if (!isActive || hasManualFederalStateChangeRef.current || !federalState) return;
+
+        setCalc(prev => ({ ...prev, bundesland: federalState }));
+        setRev(prev => ({ ...prev, bundesland: federalState }));
+      } catch {
+        // Ohne Geo-Header bleibt die sichere Standardauswahl NRW bestehen.
+      }
+    };
+
+    void applyLocationDefault();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   // Click-Away für Tooltips und Einheiten-Rechner
   useEffect(() => {
@@ -452,6 +479,13 @@ export default function Home() {
 
       return next;
     });
+  };
+
+  const updateFederalState = (value: string) => {
+    hasManualFederalStateChangeRef.current = true;
+    setCalc(prev => ({ ...prev, bundesland: value }));
+    setRev(prev => ({ ...prev, bundesland: value }));
+    setSyncedFields(prev => ({ ...prev, bundesland: false }));
   };
 
   const updateCalcMieteFromRechner = (currentMieten: string[], isOpen: boolean) => {
@@ -727,6 +761,7 @@ export default function Home() {
 
   // Manuelle Synchronisation
   const syncFromCalcToRev = () => {
+    hasManualFederalStateChangeRef.current = true;
     const syncedArea = parseNumber(calc.wohnflaeche);
     const syncedTargetPrice = formatAcc(syncedArea > 0 ? parseNumber(calc.mietePA) / syncedArea / 12 : 0);
     setRev(prev => ({
@@ -859,6 +894,7 @@ export default function Home() {
   };
 
   const handleLoadObject = (obj: SavedObject) => {
+    hasManualFederalStateChangeRef.current = true;
     setCalc(obj.calc);
     setRev({
       ...(obj.rev || rev),
@@ -1243,7 +1279,7 @@ export default function Home() {
                       <select
                         id="federal-state"
                         value={calc.bundesland}
-                        onChange={(e) => updateCalc("bundesland", e.target.value)}
+                        onChange={(e) => updateFederalState(e.target.value)}
                         style={{ border: '1px solid var(--input-required-border)', background: 'var(--input-required-bg)', color: 'var(--input-required-text)', appearance: 'none', cursor: 'pointer' }}
                       >
                         {Object.keys(grunderwerbsteuer).sort().map(bl => (
@@ -1935,7 +1971,7 @@ export default function Home() {
                         <select
                           id="reverse-federal-state"
                           value={rev.bundesland}
-                          onChange={(e) => updateRev("bundesland", e.target.value)}
+                          onChange={(e) => updateFederalState(e.target.value)}
                           style={{ border: '1px solid var(--input-optional-border)', background: 'var(--input-optional-bg)', color: 'var(--input-optional-text)', appearance: 'none', cursor: 'pointer' }}
                         >
                           {Object.keys(grunderwerbsteuer).sort().map(bl => (

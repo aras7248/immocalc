@@ -17,8 +17,8 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: "ImmoCalc | ImmoCow",
-  description: "Deal-Analyse und Wertermittlung als Teil der ImmoCow Produktfamilie.",
+  title: "ImmoCalc | Immobilienanalyse",
+  description: "Eigenständige App für Immobilienkalkulation, Deal-Analyse und Wertermittlung.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

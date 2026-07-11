@@ -12,11 +12,11 @@
 
 ## Ergebnis
 
-- Die dritte Navigation „Premium-Analyse“ übernimmt die bestehende ImmoCow-Pill-Navigation und bleibt mit den beiden Rechnern gleichwertig erreichbar.
+- Die dritte Navigation „Premium-Analyse“ übernimmt die bestehende ImmoCalc-Pill-Navigation und bleibt mit den beiden Rechnern gleichwertig erreichbar.
 - Die dauerhaft sichtbare Immobilienleiste bleibt die gemeinsame Datenbasis für alle drei Modi.
 - Der Premium-Einstieg folgt der gewählten Referenz: Premium-Kennzeichnung, Investitionsanalyse, zwei auswählbare Tarife, Freischalt-CTA und kompakte Vorteilsliste.
 - Investor (bis 3 Immobilien) und Professional (unbegrenzt) lassen sich eindeutig auswählen; `aria-pressed` bildet den aktiven Tarif ab.
-- Die CTA behauptet noch keine verfügbare Zahlung. Sie zeigt transparent, dass die zentrale ImmoCow-Zahlungsanbindung erst in einer Folgephase aktiviert wird.
+- Die CTA behauptet noch keine verfügbare Zahlung. Sie zeigt transparent, dass die eigenständige Buchung direkt in ImmoCalc erst in einer Folgephase aktiviert wird.
 - Auf dem Smartphone wechseln die Tab-Texte auf kurze Bezeichnungen, die Tarifkarten stapeln sich und alle Kernbereiche bleiben innerhalb des 390-px-Viewports.
 - Die mobile DOM-Prüfung ergab für Seite, Navigation, Immobilienleiste, Premium-Bereich, Tarifkarten und Vorteilsliste keinen horizontalen Überlauf.
 - Standard- und Rückwärtsrechner wurden nach der Erweiterung erneut geöffnet; beide Tabpanels waren vorhanden und funktionsfähig.

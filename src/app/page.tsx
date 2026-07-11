@@ -811,7 +811,7 @@ export default function Home() {
   const handlePremiumUnlock = () => {
     const planName = selectedPremiumPlan === 'investor' ? 'Investor' : 'Professional';
     setPremiumNotice(
-      `Der ${planName}-Tarif ist für die nächste Phase vorbereitet. Die Buchung wird später über die zentrale ImmoCow-Zahlungsanbindung aktiviert.`,
+      `Der ${planName}-Tarif ist für die nächste Phase vorbereitet. Die Buchung wird später direkt in ImmoCalc aktiviert.`,
     );
   };
 
@@ -955,13 +955,13 @@ export default function Home() {
 
   return (
     <div className="app-container">
-      {/* ═══ TOP BAR — ImmoCow product family style ═══ */}
+      {/* ═══ TOP BAR — eigenständige ImmoCalc-App im gemeinsamen Designsystem ═══ */}
       <header className="app-topbar">
         <div className="app-brand">
           <Image
             className="app-brand__mark brand-logo brand-logo--light"
             src="/brand/logo-icon.png"
-            alt="ImmoCow"
+            alt="ImmoCalc"
             width={52}
             height={52}
             priority
@@ -976,7 +976,7 @@ export default function Home() {
           />
           <div>
             <h1 className="app-brand__title">ImmoCalc</h1>
-            <span className="app-brand__eyebrow">Deal-Analyse von ImmoCow</span>
+            <span className="app-brand__eyebrow">Eigenständige Immobilienanalyse</span>
           </div>
         </div>
 

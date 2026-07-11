@@ -1716,7 +1716,7 @@ button:not(.tooltip-trigger) {
 
 .auth-brand .brand-logo {
   width: auto;
-  height: 116px;
+  height: 92px;
   object-fit: contain;
 }
 
@@ -1746,6 +1746,13 @@ button:not(.tooltip-trigger) {
   margin-top: 0.55rem;
   color: var(--text-secondary);
   font-size: 0.95rem;
+}
+
+.auth-heading .auth-account-hint {
+  margin-top: 0.6rem;
+  color: var(--accent-strong);
+  font-size: 0.75rem;
+  font-weight: 750;
 }
 
 .auth-form {

@@ -1,7 +1,7 @@
 {
-  "name": "ImmoCalc | ImmoCow",
+  "name": "ImmoCalc | Immobilienanalyse",
   "short_name": "ImmoCalc",
-  "description": "Deal-Analyse und Wertermittlung als Teil der ImmoCow Produktfamilie",
+  "description": "Eigenständige App für Immobilienkalkulation, Deal-Analyse und Wertermittlung",
   "start_url": "/",
   "display": "standalone",
   "orientation": "any",

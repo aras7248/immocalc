@@ -71,21 +71,21 @@ export default function LoginPage() {
           <ThemeToggle compact />
         </div>
 
-        <div className="auth-brand" aria-label="ImmoCow ImmoCalc">
+        <div className="auth-brand" aria-label="ImmoCalc">
           <Image
             className="brand-logo brand-logo--light"
-            src="/brand/logo-full.png"
-            alt="ImmoCow"
-            width={160}
-            height={139}
+            src="/brand/logo-icon.png"
+            alt="ImmoCalc"
+            width={112}
+            height={112}
             priority
           />
           <Image
             className="brand-logo brand-logo--dark"
-            src="/brand/logo-full-white.png"
+            src="/brand/logo-icon-white.png"
             alt=""
-            width={160}
-            height={139}
+            width={112}
+            height={112}
             priority
           />
           <span className="auth-product-name">ImmoCalc</span>
@@ -93,7 +93,8 @@ export default function LoginPage() {
 
         <header className="auth-heading">
           <h1 id="login-title">Willkommen zurück</h1>
-          <p>Analysiere Immobilien, vergleiche Szenarien und sichere deine Kalkulationen.</p>
+          <p>Analysiere Immobilien, vergleiche Szenarien und sichere deine Kalkulationen in ImmoCalc.</p>
+          <p className="auth-account-hint">Dein bestehender ImmoCow-Zugang funktioniert auch hier.</p>
         </header>
 
         <form className="auth-form" onSubmit={handleLogin} aria-busy={loading} noValidate>
@@ -143,7 +144,7 @@ export default function LoginPage() {
         <div className="auth-trust" aria-label="Sicherheitsmerkmale">
           <span>DSGVO-Fokus</span>
           <span>Sichere Cloud-Daten</span>
-          <span>Teil der ImmoCow Familie</span>
+          <span>Gemeinsames Kundenkonto</span>
         </div>
       </section>
     </main>

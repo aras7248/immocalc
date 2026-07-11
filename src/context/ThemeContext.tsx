@@ -9,13 +9,15 @@ interface ThemeContextValue {
   toggleTheme: () => void;
 }
 
-const THEME_STORAGE_KEY = "immocow-theme";
+const THEME_STORAGE_KEY = "immocalc-theme";
+const LEGACY_THEME_STORAGE_KEY = "immocow-theme";
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function getPreferredTheme(): Theme {
   if (typeof window === "undefined") return "light";
 
-  const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+  const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY)
+    ?? window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY);
   if (storedTheme === "light" || storedTheme === "dark") return storedTheme;
 
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";

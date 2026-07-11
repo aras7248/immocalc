@@ -202,7 +202,7 @@ const initialRevState: ReverseState = {
   maklerProzent: "3,57",
   zins: "4,00",
   tilgung: "1,50",
-  zielMietePA: "21.900,00",
+  zielMietePA: "32.160,00",
   zielMietpreisQm: "10,00",
   instandhaltungQm: "1,00",
   verwaltungPm: "30,00",

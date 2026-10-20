@@ -192,9 +192,9 @@ const initialCalcState: CalcState = {
   mietePA: "21.900,00",
   wohnflaeche: "268,00",
   baujahr: "1980",
-  instandhaltungQm: "0,00",
-  verwaltungPm: "0,00",
-  ruecklagePm: "0,00"
+  instandhaltungQm: "1,00",
+  verwaltungPm: "30,00",
+  ruecklagePm: "50,00"
 };
 
 const initialRevState: ReverseState = {
@@ -1464,6 +1464,7 @@ export default function Home() {
                 <div className="calculation-row">
                   <div className="input-group input-optional">
                     <label htmlFor="maintenance-monthly">Instandhaltung / m² / Monat</label>
+                    <small>Ansatz für laufende Reparaturen. Bereits hier erfasste Beträge nicht nochmals als Rücklage eintragen.</small>
                     <div className="input-wrapper">
                       <input id="maintenance-monthly" inputMode="decimal" type="text" value={calc.instandhaltungQm} onChange={(e) => updateCalc("instandhaltungQm", e.target.value)} onBlur={() => handleBlurCalc("instandhaltungQm")} onKeyDown={handleEnterKey} />
                       <span className="input-suffix">€</span>
@@ -1478,6 +1479,7 @@ export default function Home() {
                   </div>
                   <div className="input-group input-optional">
                     <label htmlFor="reserve-monthly">Rücklage / Monat</label>
+                    <small>Zusätzliche Liquiditätsreserve für künftige Maßnahmen, ohne die bereits angesetzte Instandhaltung. Mindert den verfügbaren Cashflow.</small>
                     <div className="input-wrapper">
                       <input id="reserve-monthly" inputMode="decimal" type="text" value={calc.ruecklagePm} onChange={(e) => updateCalc("ruecklagePm", e.target.value)} onBlur={() => handleBlurCalc("ruecklagePm")} onKeyDown={handleEnterKey} />
                       <span className="input-suffix">€</span>
@@ -1595,7 +1597,7 @@ export default function Home() {
                   <div className="result-card" style={{ padding: '0.75rem', border: '1px solid var(--accent-color)', background: 'rgba(255,255,255,0.08)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                       <span className="label" style={{ color: 'var(--accent-color)', fontWeight: 700, fontSize: '0.85rem', margin: 0 }}>
-                        Cash-on-Cash-Rendite
+                        Cash-on-Cash-Rendite (vor Steuern)
                       </span>
                       <InfoTooltip
                         id="roe"
@@ -1627,7 +1629,7 @@ export default function Home() {
                     </div>
                     <div className="result-card" style={{ padding: '0.5rem', background: 'rgba(255,255,255,0.08)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span className="label" style={{ fontSize: '0.7rem', margin: 0 }}>Netto-Rendite</span>
+                        <span className="label" style={{ fontSize: '0.7rem', margin: 0 }}>Netto-Rendite (vor Steuern)</span>
                         <InfoTooltip
                           id="netto"
                           title="Netto-Mietrendite"
@@ -1670,7 +1672,7 @@ export default function Home() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
                   <div className="result-card" style={{ padding: '1rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span className="label" style={{ margin: 0 }}>CF / Monat</span>
+                      <span className="label" style={{ margin: 0 }}>CF / Monat (vor Steuern)</span>
                       <InfoTooltip
                         id="cfpm"
                         title="Cashflow pro Monat"
@@ -1685,7 +1687,7 @@ export default function Home() {
                   </div>
                   <div className="result-card" style={{ padding: '1rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span className="label" style={{ margin: 0 }}>CF / Jahr</span>
+                      <span className="label" style={{ margin: 0 }}>CF / Jahr (vor Steuern)</span>
                       <InfoTooltip
                         id="cfpa"
                         title="Cashflow pro Jahr"
@@ -1804,7 +1806,7 @@ export default function Home() {
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem' }}>
                         <div style={{ width: '10px', height: '10px', background: 'var(--success-color)', borderRadius: '2px' }}></div>
-                        <div style={{ flex: 1 }}>Cashflow</div>
+                        <div style={{ flex: 1 }}>Cashflow (vor Steuern)</div>
                         <div style={{ fontWeight: 600 }}>{Math.round(cashflowAnteil)}%</div>
                       </div>
                       {deckungslueckePA > 0 && (
@@ -1972,6 +1974,7 @@ export default function Home() {
                   <div className="calculation-row">
                     <div className="input-group input-optional">
                       <label htmlFor="reverse-maintenance">Instandhaltung / m² / Monat</label>
+                    <small>Ansatz für laufende Reparaturen. Bereits hier erfasste Beträge nicht nochmals als Rücklage eintragen.</small>
                       <div className="input-wrapper">
                         <input id="reverse-maintenance" inputMode="decimal" type="text" value={rev.instandhaltungQm} onChange={(e) => updateRev("instandhaltungQm", e.target.value)} onBlur={() => handleBlurRev("instandhaltungQm")} onKeyDown={handleEnterKey} />
                         <span className="input-suffix">€</span>
@@ -1988,6 +1991,7 @@ export default function Home() {
 
                     <div className="input-group input-optional">
                       <label htmlFor="reverse-reserve">Rücklage / Monat</label>
+                    <small>Zusätzliche Liquiditätsreserve für künftige Maßnahmen, ohne die bereits angesetzte Instandhaltung. Mindert den verfügbaren Cashflow.</small>
                       <div className="input-wrapper">
                         <input id="reverse-reserve" inputMode="decimal" type="text" value={rev.ruecklagePm} onChange={(e) => updateRev("ruecklagePm", e.target.value)} onBlur={() => handleBlurRev("ruecklagePm")} onKeyDown={handleEnterKey} />
                         <span className="input-suffix">€</span>

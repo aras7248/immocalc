@@ -61,6 +61,7 @@ export interface StandardCalculationInput
   interestPercent: number;
   repaymentPercent: number;
   scenarioRentIncreasePercent?: number;
+  scenarioCostIncreasePercent?: number;
   vacancyPercent?: number;
 }
 
@@ -72,6 +73,7 @@ export interface ReverseCalculationInput
   interestPercent: number;
   repaymentPercent: number;
   scenarioRentIncreasePercent?: number;
+  scenarioCostIncreasePercent?: number;
   vacancyPercent?: number;
 }
 
@@ -97,6 +99,7 @@ export interface NormalizedStandardCalculationInput
   interestPercent: number;
   repaymentPercent: number;
   scenarioRentIncreasePercent: number;
+  scenarioCostIncreasePercent: number;
   vacancyPercent: number;
 }
 
@@ -108,6 +111,7 @@ export interface NormalizedReverseCalculationInput
   interestPercent: number;
   repaymentPercent: number;
   scenarioRentIncreasePercent: number;
+  scenarioCostIncreasePercent: number;
   vacancyPercent: number;
 }
 
@@ -193,6 +197,7 @@ export interface StandardCalculationResult {
   totalInvestment: number;
   financing: FinancingResult;
   operatingCosts: OperatingCostsResult;
+  scenarioOperatingCosts: OperatingCostsResult;
   squareMeterValues: SquareMeterValues;
   base: StandardCaseResult;
   scenario: StandardCaseResult;
@@ -217,6 +222,7 @@ export interface ReverseCalculationResult {
   input: NormalizedReverseCalculationInput;
   annuityPercent: number;
   operatingCosts: OperatingCostsResult;
+  scenarioOperatingCosts: OperatingCostsResult;
   base: ReverseCaseResult;
   scenario: ReverseCaseResult;
   offerAnalysis: ReverseOfferAnalysisResult;
@@ -355,6 +361,18 @@ export function calculateOperatingCosts(
     reserveAnnual,
     totalAnnual,
     totalMonthly: nonNegativeResult(totalAnnual / 12),
+  };
+}
+
+/** Scale each cost component consistently; the base costs remain untouched. */
+function calculateScenarioOperatingCosts(costs: OperatingCostsResult, increasePercent: number): OperatingCostsResult {
+  const factor = 1 + increasePercent / 100;
+  return {
+    maintenanceAnnual: nonNegativeResult(costs.maintenanceAnnual * factor),
+    managementAnnual: nonNegativeResult(costs.managementAnnual * factor),
+    reserveAnnual: nonNegativeResult(costs.reserveAnnual * factor),
+    totalAnnual: nonNegativeResult(costs.totalAnnual * factor),
+    totalMonthly: nonNegativeResult(costs.totalMonthly * factor),
   };
 }
 
@@ -497,6 +515,7 @@ export function calculateStandard(
     interestPercent: normalizeFiniteNonNegative(input.interestPercent),
     repaymentPercent: normalizeFiniteNonNegative(input.repaymentPercent),
     vacancyPercent: normalizeVacancyPercent(input.vacancyPercent),
+    scenarioCostIncreasePercent: normalizeFiniteNonNegative(input.scenarioCostIncreasePercent ?? 0),
     scenarioRentIncreasePercent: normalizeFiniteNonNegative(
       input.scenarioRentIncreasePercent ?? 0,
     ),
@@ -514,6 +533,7 @@ export function calculateStandard(
     normalizedInput.repaymentPercent,
   );
   const operatingCosts = calculateOperatingCosts(normalizedInput);
+  const scenarioOperatingCosts = calculateScenarioOperatingCosts(operatingCosts, normalizedInput.scenarioCostIncreasePercent);
   const scenarioAnnualRent = nonNegativeResult(
     normalizedInput.annualRent *
       (1 + normalizedInput.scenarioRentIncreasePercent / 100),
@@ -534,7 +554,7 @@ export function calculateStandard(
     totalInvestment,
     normalizedInput.livingArea,
     acquisitionCosts.equityRequired,
-    operatingCosts,
+    scenarioOperatingCosts,
     financing,
     normalizedInput.vacancyPercent,
   );
@@ -545,6 +565,7 @@ export function calculateStandard(
     totalInvestment,
     financing,
     operatingCosts,
+    scenarioOperatingCosts,
     squareMeterValues: {
       purchasePricePerSqm: nonNegativeResult(
         safeRatio(normalizedInput.purchasePrice, normalizedInput.livingArea),
@@ -619,6 +640,7 @@ export function calculateReverse(
     interestPercent: normalizeFiniteNonNegative(input.interestPercent),
     repaymentPercent: normalizeFiniteNonNegative(input.repaymentPercent),
     vacancyPercent: normalizeVacancyPercent(input.vacancyPercent),
+    scenarioCostIncreasePercent: normalizeFiniteNonNegative(input.scenarioCostIncreasePercent ?? 0),
     scenarioRentIncreasePercent: normalizeFiniteNonNegative(
       input.scenarioRentIncreasePercent ?? 0,
     ),
@@ -627,6 +649,7 @@ export function calculateReverse(
     normalizedInput.interestPercent + normalizedInput.repaymentPercent,
   );
   const operatingCosts = calculateOperatingCosts(normalizedInput);
+  const scenarioOperatingCosts = calculateScenarioOperatingCosts(operatingCosts, normalizedInput.scenarioCostIncreasePercent);
   const scenarioAnnualRent = nonNegativeResult(
     normalizedInput.targetAnnualRent *
       (1 + normalizedInput.scenarioRentIncreasePercent / 100),
@@ -649,6 +672,7 @@ export function calculateReverse(
     input: normalizedInput,
     annuityPercent,
     operatingCosts,
+    scenarioOperatingCosts,
     base: calculateReverseCase(
       normalizedInput.targetAnnualRent,
       normalizedInput,
@@ -658,7 +682,7 @@ export function calculateReverse(
     scenario: calculateReverseCase(
       scenarioAnnualRent,
       normalizedInput,
-      operatingCosts,
+      scenarioOperatingCosts,
       annuityPercent,
     ),
     offerAnalysis: {

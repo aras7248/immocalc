@@ -15,7 +15,7 @@ import {
   DEFAULT_VACANCY_PERCENT,
 } from '@/lib/calculations';
 import { supabase } from '@/lib/supabase';
-import { isRecord, mergeState, SAVED_OBJECT_SCHEMA_VERSION } from '@/lib/savedState';
+import { isRecord, mergeState, readSavedScenarioCostIncrease, SAVED_OBJECT_SCHEMA_VERSION } from '@/lib/savedState';
 
 // Interface for saved objects
 interface SavedObject {
@@ -26,6 +26,7 @@ interface SavedObject {
   rev: ReverseState;
   mieten: string[];
   rentIncrease: number;
+  scenarioCostIncreasePercent: number;
 }
 
 // Helper für Zahlen-Parsing und Formatierung
@@ -286,6 +287,7 @@ function parseSavedObjectRow(row: unknown): SavedObject | null {
       ? payload.mieten.filter((entry): entry is string => typeof entry === "string").slice(0, 10)
       : [""],
     rentIncrease: parsedRentIncrease,
+    scenarioCostIncreasePercent: readSavedScenarioCostIncrease(payload.scenarioCostIncreasePercent),
   };
 }
 
@@ -652,6 +654,8 @@ export default function Home() {
   const zins = parseNumber(calc.zins) || 0;
   const tilgung = parseNumber(calc.tilgung) || 0;
   const [rentIncrease, setRentIncrease] = useState<number>(0);
+  const [scenarioCostIncreasePercent, setScenarioCostIncreasePercent] = useState(0);
+  const isScenarioActive = rentIncrease !== 0 || scenarioCostIncreasePercent !== 0;
   const grunderwerbsteuer: Record<string, number> = LAND_TRANSFER_TAX_RATES_2026;
   const standardResult = calculateStandard({
     federalState: calc.bundesland,
@@ -668,8 +672,9 @@ export default function Home() {
     interestPercent: zins,
     repaymentPercent: tilgung,
     scenarioRentIncreasePercent: rentIncrease,
+    scenarioCostIncreasePercent,
   });
-  const standardCase = rentIncrease > 0 ? standardResult.scenario : standardResult.base;
+  const standardCase = isScenarioActive ? standardResult.scenario : standardResult.base;
 
   const gesamtNkProzent = standardResult.acquisitionCosts.totalPercent;
   const maklerEuro = standardResult.acquisitionCosts.brokerAmount;
@@ -687,7 +692,7 @@ export default function Home() {
   const nettoRendite = standardCase.netRentalYieldPercent;
   const kaufpreisFaktor = standardCase.purchasePriceFactor;
   const roe = standardCase.returnOnEquityPercent;
-  const laufendeKostenPM = standardResult.operatingCosts.totalMonthly;
+  const laufendeKostenPM = (isScenarioActive ? standardResult.scenarioOperatingCosts : standardResult.operatingCosts).totalMonthly;
 
   const kostenAnteil = standardCase.chart.operatingCosts.percentOfRent;
   const zinsAnteil = standardCase.chart.interest.percentOfRent;
@@ -749,6 +754,7 @@ export default function Home() {
     interestPercent: parseNumber(rev.zins),
     repaymentPercent: parseNumber(rev.tilgung),
     scenarioRentIncreasePercent: rentIncrease,
+    scenarioCostIncreasePercent,
   });
   const revGesamtNkProzent = reverseResult.base.acquisitionCosts.totalPercent;
   const revKaufpreis = reverseResult.base.maxPurchasePrice;
@@ -853,6 +859,7 @@ export default function Home() {
           rev,
           mieten,
           rentIncrease,
+          scenarioCostIncreasePercent,
         }
       };
 
@@ -912,6 +919,7 @@ export default function Home() {
     });
     setMieten(obj.mieten || [""]);
     setRentIncrease(obj.rentIncrease || 0);
+    setScenarioCostIncreasePercent(obj.scenarioCostIncreasePercent ?? 0);
   };
 
   const handleClearData = () => {
@@ -921,6 +929,7 @@ export default function Home() {
       setSyncedFields({});
       setMieten([""]);
       setRentIncrease(0);
+      setScenarioCostIncreasePercent(0);
       setScanResult(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       setIsFlashActive(true);
@@ -1490,6 +1499,15 @@ export default function Home() {
                       <span className="input-suffix">%</span>
                     </div>
                     <small id="vacancy-percent-help">0 bis 100 % der Soll-Jahresmiete. Bruttorendite und Kaufpreisfaktor verwenden weiterhin die Soll-Miete.</small>
+                  </div>
+
+                <div className="input-group input-optional">
+                    <label htmlFor="standard-scenario-cost-increase">Kostensteigerung im Szenario</label>
+                    <div className="input-wrapper">
+                      <input id="standard-scenario-cost-increase" type="number" min="0" max="100" step="0.1" value={scenarioCostIncreasePercent} onChange={(e) => setScenarioCostIncreasePercent(readSavedScenarioCostIncrease(e.target.valueAsNumber))} aria-describedby="standard-scenario-cost-increase-help" />
+                      <span className="input-suffix">%</span>
+                    </div>
+                    <small id="standard-scenario-cost-increase-help">Einmalige Änderung von Instandhaltung, Verwaltung und Rücklage im Szenario. Keine jährliche Steigerung; die Basisrechnung bleibt unverändert.</small>
                   </div>
 
                 <h3 className="cluster-title">5. Finanzierung</h3>
@@ -2096,11 +2114,19 @@ export default function Home() {
                         +15% Fix
                       </button>
                     </div>
+                    <div className="input-group input-optional">
+                    <label htmlFor="reverse-scenario-cost-increase">Kostensteigerung im Szenario</label>
+                    <div className="input-wrapper">
+                      <input id="reverse-scenario-cost-increase" type="number" min="0" max="100" step="0.1" value={scenarioCostIncreasePercent} onChange={(e) => setScenarioCostIncreasePercent(readSavedScenarioCostIncrease(e.target.valueAsNumber))} aria-describedby="reverse-scenario-cost-increase-help" />
+                      <span className="input-suffix">%</span>
+                    </div>
+                    <small id="reverse-scenario-cost-increase-help">Einmalige Änderung von Instandhaltung, Verwaltung und Rücklage im Szenario. Keine jährliche Steigerung; die Basisrechnung bleibt unverändert.</small>
+                  </div>
                     <label htmlFor="rent-increase" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 500 }}>
                       <span>Mietsteigerung (+{rentIncrease}%)</span>
                       <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Max Kaufpreis neu: <span className="positive" style={{ fontWeight: 700 }}>{formatAcc(revKaufpreisNeu)} €</span></span>
                       <div className="scenario-note">
-                        <span>Bei {rentIncrease}% Steigerung: <strong>{formatAcc(revKaufpreisNeu)} €</strong></span>
+                        <span>Bei {rentIncrease}% Miet- und {scenarioCostIncreasePercent}% Kostensteigerung: <strong>{formatAcc(revKaufpreisNeu)} €</strong></span>
                       </div>
                     </label>
                     <input

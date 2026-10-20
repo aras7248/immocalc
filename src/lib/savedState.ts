@@ -14,3 +14,9 @@ export function mergeState<T extends object>(defaults: T, value: unknown): T {
     }),
   ) as T;
 }
+
+/** Missing or invalid scenario values in older objects retain the base case. */
+export function readSavedScenarioCostIncrease(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.min(100, Math.max(0, value)) : 0;
+}

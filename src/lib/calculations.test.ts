@@ -297,3 +297,45 @@ test("A2: vacancy applies to scenarios and is bounded defensively", () => {
     assert.equal(calculateStandard({ ...commonInput, purchasePrice: 350_000, annualRent: 21_900, vacancyPercent: input }).input.vacancyPercent, expected);
   }
 });
+
+test("A3: cost increase affects each scenario cost and leaves the base case unchanged", () => {
+  const input = { ...commonInput, purchasePrice: 350_000, annualRent: 21_900, vacancyPercent: 2 };
+  const baseline = calculateStandard(input);
+  const result = calculateStandard({ ...input, scenarioCostIncreasePercent: 10 });
+  assert.deepEqual(result.base, baseline.base);
+  assert.deepEqual(result.operatingCosts, baseline.operatingCosts);
+  closeTo(result.scenarioOperatingCosts.maintenanceAnnual, 3_216 * 1.1);
+  closeTo(result.scenarioOperatingCosts.managementAnnual, 360 * 1.1);
+  closeTo(result.scenarioOperatingCosts.reserveAnnual, 600 * 1.1);
+  closeTo(result.scenarioOperatingCosts.totalAnnual, 4_176 * 1.1);
+  closeTo(result.scenarioOperatingCosts.totalMonthly, 348 * 1.1);
+  closeTo(result.scenario.cashFlowAnnual, -1_964 - 417.6);
+  closeTo(result.scenario.chart.requiredOutflowAnnual, 19_250 + 4_176 * 1.1);
+});
+
+test("A3: omitted and zero scenario cost increases preserve previous results", () => {
+  const standard = { ...commonInput, purchasePrice: 350_000, annualRent: 21_900, scenarioRentIncreasePercent: 10 };
+  const reverse = { ...commonInput, targetAnnualRent: 21_900, offeredPurchasePrice: 350_000, scenarioRentIncreasePercent: 10 };
+  assert.deepEqual(calculateStandard(standard), calculateStandard({ ...standard, scenarioCostIncreasePercent: 0 }));
+  assert.deepEqual(calculateReverse(reverse), calculateReverse({ ...reverse, scenarioCostIncreasePercent: 0 }));
+});
+
+test("A3: reverse scenario includes increased costs and round-trips to break-even", () => {
+  const input = { ...commonInput, targetAnnualRent: 21_900, offeredPurchasePrice: 350_000, vacancyPercent: 2, scenarioRentIncreasePercent: 10 };
+  const baseline = calculateReverse(input);
+  const reverse = calculateReverse({ ...input, scenarioCostIncreasePercent: 2 });
+  assert.deepEqual(reverse.base, baseline.base);
+  assert.deepEqual(reverse.offerAnalysis, baseline.offerAnalysis);
+  closeTo(reverse.scenario.noiAnnual, 24_090 * 0.98 - 4_176 * 1.02);
+  closeTo(baseline.scenario.maxPurchasePrice - reverse.scenario.maxPurchasePrice, 4_176 * 0.02 / 0.055);
+  const standard = calculateStandard({ ...input, purchasePrice: reverse.scenario.maxPurchasePrice, annualRent: 21_900, scenarioCostIncreasePercent: 2 });
+  closeTo(standard.scenario.cashFlowAnnual, 0);
+});
+
+test("A3: invalid scenario cost input defaults to zero", () => {
+  for (const scenarioCostIncreasePercent of [NaN, Infinity, -1]) {
+    const result = calculateStandard({ ...commonInput, purchasePrice: 350_000, annualRent: 21_900, scenarioCostIncreasePercent });
+    assert.equal(result.input.scenarioCostIncreasePercent, 0);
+    assert.deepEqual(result.scenarioOperatingCosts, result.operatingCosts);
+  }
+});

@@ -69,8 +69,14 @@ Weitere Details stehen in [docs/product-boundaries.md](docs/product-boundaries.m
 - Referenz: 350.000 € Kaufpreis, 21.900 € Jahresmiete und die Beispielkosten ergeben −1.526 €/Jahr vor Mietausfall beziehungsweise −1.964 €/Jahr bei 2 % Mietausfall.
 - Stand der Prüfungen: 23 Node-Tests und TypeScript-Prüfung erfolgreich. ESLint und Produktionsbuild können wegen fehlender Abhängigkeiten noch nicht starten (`@eslint-community/eslint-utils`, `@swc/helpers`); der npm-Zugriff ist aus dieser Arbeitsumgebung nicht erreichbar. Die Aufgaben D1, A1 und A2 werden auf einem separaten Review-Branch geführt. Vollständige Prüfungen erfolgen über GitHub Actions. Browserprüfung und Produktionsveröffentlichung stehen aus.
 
-A3 bis F3 sind noch nicht umgesetzt.
+A4 bis F3 sind noch nicht umgesetzt (ausgenommen D1).
 
 ## Automatische Prüfungen (D1)
 
 GitHub Actions führt bei Push und Pull Request mit Node 22.18.0 zunächst `npm ci` und anschließend Typecheck, ESLint, Unit-Tests und den Produktionsbuild aus. Für den Build werden ausschließlich Supabase-Platzhalter verwendet; es erfolgen keine Tests gegen produktive Kundendaten. Die CI veröffentlicht die App nicht.
+
+### A3 – Kostensteigerung im Szenario
+
+`scenarioCostIncreasePercent` erhöht ausschließlich die Szenariokosten für Instandhaltung, Verwaltung und zusätzliche Rücklage. Standard- und Rückwärtsrechnung sowie die Deckungsanzeige verwenden im Szenario dieselbe Kostenbasis. Die Basisrechnung und Angebotsprüfung bleiben unverändert. Das Feld ist in beiden Rechnern einstellbar, wird gespeichert und beim Laden wiederhergestellt. Alte Speicherstände und direkte API-Aufrufe erhalten den Standardwert 0 %. Dies ist eine einmalige Szenarioänderung und keine jährliche Kostenprojektion.
+
+Validierung für A3: 28 Unit-Tests und TypeScript lokal erfolgreich; vollständige Prüfungen erfolgen im CI des Review-Branches. Der vorangehende A1/A2/D1-Stand hat sämtliche CI-Prüfungen bestanden.

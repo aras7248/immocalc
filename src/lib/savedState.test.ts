@@ -19,3 +19,13 @@ test("A2: explicit zero and full vacancy survive saved-state loading", () => {
   assert.deepEqual(mergeState(defaults, null), defaults);
   assert.deepEqual(mergeState(defaults, { vacancyPercent: 0 }), defaults);
 });
+
+test("A3: legacy saved scenario costs default to zero and saved values survive loading", async () => {
+  const { readSavedScenarioCostIncrease } = await import("./savedState.ts");
+  for (const value of [undefined, null, "2", NaN, Infinity, -1]) {
+    assert.equal(readSavedScenarioCostIncrease(value), 0);
+  }
+  assert.equal(readSavedScenarioCostIncrease(2.5), 2.5);
+  assert.equal(readSavedScenarioCostIncrease(0), 0);
+  assert.equal(readSavedScenarioCostIncrease(150), 100);
+});

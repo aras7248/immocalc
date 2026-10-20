@@ -260,3 +260,40 @@ test("A1: standard UI starts with realistic costs and labels pre-tax results", a
   assert.ok(page.includes("Netto-Rendite (vor Steuern)"));
   assert.equal(calculateStandard({ ...commonInput, purchasePrice: 350_000, annualRent: 21_900 }).base.cashFlowAnnual, -1_526);
 });
+
+for (const vacancyPercent of [0, 2, 100]) {
+  test(`A2: ${vacancyPercent}% vacancy affects NOI, cashflow and rent coverage only`, () => {
+    const result = calculateStandard({ ...commonInput, purchasePrice: 350_000, annualRent: 21_900, vacancyPercent });
+    const effective = 21_900 * (1 - vacancyPercent / 100);
+    closeTo(result.base.effectiveAnnualRent, effective);
+    closeTo(result.base.vacancyAnnual, 21_900 - effective);
+    closeTo(result.base.cashFlowAnnual, effective - 4_176 - 19_250);
+    closeTo(result.base.grossRentalYieldPercent, 21_900 / 350_000 * 100);
+    closeTo(result.base.purchasePriceFactor, 350_000 / 21_900);
+    closeTo(result.base.chart.coveredOutflowAnnual, Math.min(effective, 23_426));
+    const reverse = calculateReverse({ ...commonInput, targetAnnualRent: 21_900, vacancyPercent });
+    if (vacancyPercent < 100) {
+      const roundTrip = calculateStandard({ ...commonInput, purchasePrice: reverse.base.maxPurchasePrice, annualRent: 21_900, vacancyPercent });
+      closeTo(roundTrip.base.cashFlowAnnual, 0);
+    } else {
+      assert.equal(reverse.base.maxPurchasePrice, 0);
+      assert.equal(result.base.chart.coveragePercent, 0);
+    }
+  });
+}
+
+test("A2: offer analysis requires contractual rent sufficient after vacancy", () => {
+  const reverse = calculateReverse({ ...commonInput, targetAnnualRent: 21_900, offeredPurchasePrice: 350_000, vacancyPercent: 2 });
+  const standard = calculateStandard({ ...commonInput, purchasePrice: 350_000, annualRent: reverse.offerAnalysis.requiredAnnualRent, vacancyPercent: 2 });
+  closeTo(standard.base.cashFlowAnnual, 0);
+  assert.equal(calculateStandard({ ...commonInput, purchasePrice: 350_000, annualRent: 21_900, vacancyPercent: 2 }).base.cashFlowAnnual, -1_964);
+  assert.equal(calculateReverse({ ...commonInput, targetAnnualRent: 21_900, offeredPurchasePrice: 350_000, vacancyPercent: 100 }).offerAnalysis.isAffordableAtTargetRent, false);
+});
+
+test("A2: vacancy applies to scenarios and is bounded defensively", () => {
+  const result = calculateStandard({ ...commonInput, purchasePrice: 350_000, annualRent: 21_900, scenarioRentIncreasePercent: 10, vacancyPercent: 2 });
+  closeTo(result.scenario.effectiveAnnualRent, 24_090 * 0.98);
+  for (const [input, expected] of [[-3, 0], [150, 100], [NaN, 0], [Infinity, 0]]) {
+    assert.equal(calculateStandard({ ...commonInput, purchasePrice: 350_000, annualRent: 21_900, vacancyPercent: input }).input.vacancyPercent, expected);
+  }
+});

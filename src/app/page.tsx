@@ -12,8 +12,10 @@ import {
   calculateReverse,
   calculateStandard,
   LAND_TRANSFER_TAX_RATES_2026,
+  DEFAULT_VACANCY_PERCENT,
 } from '@/lib/calculations';
 import { supabase } from '@/lib/supabase';
+import { isRecord, mergeState, SAVED_OBJECT_SCHEMA_VERSION } from '@/lib/savedState';
 
 // Interface for saved objects
 interface SavedObject {
@@ -84,6 +86,7 @@ interface CalcState {
   instandhaltungQm: string;
   verwaltungPm: string;
   ruecklagePm: string;
+  vacancyPercent: string;
 }
 
 // Interface for reverse calculation
@@ -101,6 +104,7 @@ interface ReverseState {
   instandhaltungQm: string;
   verwaltungPm: string;
   ruecklagePm: string;
+  vacancyPercent: string;
 }
 
 // Info-Tooltip Komponente
@@ -194,6 +198,7 @@ const initialCalcState: CalcState = {
   baujahr: "1980",
   instandhaltungQm: "1,00",
   verwaltungPm: "30,00",
+  vacancyPercent: DEFAULT_VACANCY_PERCENT.toFixed(2).replace(".", ","),
   ruecklagePm: "50,00"
 };
 
@@ -210,6 +215,7 @@ const initialRevState: ReverseState = {
   zielMietpreisQm: "10,00",
   instandhaltungQm: "1,00",
   verwaltungPm: "30,00",
+  vacancyPercent: DEFAULT_VACANCY_PERCENT.toFixed(2).replace(".", ","),
   ruecklagePm: "50,00"
 };
 
@@ -229,6 +235,7 @@ const emptyCalcState: CalcState = {
   baujahr: "",
   instandhaltungQm: "",
   verwaltungPm: "",
+  vacancyPercent: DEFAULT_VACANCY_PERCENT.toFixed(2).replace(".", ","),
   ruecklagePm: ""
 };
 
@@ -245,24 +252,9 @@ const emptyRevState: ReverseState = {
   zielMietpreisQm: "",
   instandhaltungQm: "",
   verwaltungPm: "",
+  vacancyPercent: DEFAULT_VACANCY_PERCENT.toFixed(2).replace(".", ","),
   ruecklagePm: ""
 };
-
-const SAVED_OBJECT_SCHEMA_VERSION = 2;
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-function mergeState<T extends object>(defaults: T, value: unknown): T {
-  if (!isRecord(value)) return defaults;
-
-  return Object.fromEntries(
-    Object.entries(defaults as Record<string, unknown>).map(([key, fallback]) => {
-      const candidate = value[key];
-      return [key, typeof candidate === typeof fallback ? candidate : fallback];
-    }),
-  ) as T;
-}
 
 function parseSavedObjectRow(row: unknown): SavedObject | null {
   if (!isRecord(row) || typeof row.id !== "string" || !isRecord(row.calc_data)) return null;
@@ -668,6 +660,7 @@ export default function Home() {
     hasBroker: calc.hasMakler,
     purchasePrice: kaufpreis,
     annualRent: mietePA,
+    vacancyPercent: parseNumber(calc.vacancyPercent),
     livingArea: wohnflaeche,
     maintenancePerSqmMonthly: parseNumber(calc.instandhaltungQm),
     managementMonthly: parseNumber(calc.verwaltungPm),
@@ -747,6 +740,7 @@ export default function Home() {
     brokerPercent: parseNumber(rev.maklerProzent),
     hasBroker: rev.hasMakler,
     targetAnnualRent: parseNumber(rev.zielMietePA),
+    vacancyPercent: parseNumber(rev.vacancyPercent),
     offeredPurchasePrice: parseNumber(calc.kaufpreis),
     livingArea: parseNumber(calc.wohnflaeche),
     maintenancePerSqmMonthly: parseNumber(rev.instandhaltungQm),
@@ -781,6 +775,7 @@ export default function Home() {
       instandhaltungQm: calc.instandhaltungQm,
       verwaltungPm: calc.verwaltungPm,
       ruecklagePm: calc.ruecklagePm,
+      vacancyPercent: calc.vacancyPercent,
       wohnflaeche: calc.wohnflaeche,
       angebotspreis: calc.kaufpreis,
       zielMietePA: calc.mietePA,
@@ -794,6 +789,7 @@ export default function Home() {
       maklerProzent: true,
       zins: true,
       tilgung: true,
+      vacancyPercent: true,
       instandhaltungQm: true,
       verwaltungPm: true,
       ruecklagePm: true,
@@ -1487,6 +1483,15 @@ export default function Home() {
                   </div>
                 </div>
 
+                  <div className="input-group input-optional">
+                    <label htmlFor="vacancy-percent">Mietausfall / Leerstand</label>
+                    <div className="input-wrapper">
+                      <input id="vacancy-percent" inputMode="decimal" type="text" value={calc.vacancyPercent} onChange={(e) => updateCalc("vacancyPercent", e.target.value)} aria-describedby="vacancy-percent-help" aria-invalid={parseNumber(calc.vacancyPercent) < 0 || parseNumber(calc.vacancyPercent) > 100} />
+                      <span className="input-suffix">%</span>
+                    </div>
+                    <small id="vacancy-percent-help">0 bis 100 % der Soll-Jahresmiete. Bruttorendite und Kaufpreisfaktor verwenden weiterhin die Soll-Miete.</small>
+                  </div>
+
                 <h3 className="cluster-title">5. Finanzierung</h3>
                 <div className="calculation-row">
                   <div className="input-group input-optional">
@@ -1575,7 +1580,7 @@ export default function Home() {
                       {roe > 12 ? (
                         <>
                           <span style={{ color: 'var(--success-color)', fontWeight: 700 }}>Starker positiver Cash-on-Cash-Wert</span><br />
-                          Die laufenden Kosten und die Annuität sind in diesem Szenario gedeckt. Prüfe zusätzlich Leerstand, Steuern und den tatsächlichen Darlehensvertrag.
+                          Die laufenden Kosten und die Annuität sind in diesem Szenario gedeckt. Der eingestellte Mietausfall ist berücksichtigt. Prüfe zusätzlich Steuern und den tatsächlichen Darlehensvertrag.
                         </>
                       ) : roe >= 5 ? (
                         <>
@@ -1633,7 +1638,7 @@ export default function Home() {
                         <InfoTooltip
                           id="netto"
                           title="Netto-Mietrendite"
-                          text="Berechnung: Jahreskaltmiete minus Instandhaltung, Verwaltung und Rücklage, geteilt durch die Gesamt-Investition. Leerstand und Steuern sind nicht enthalten."
+                          text="Berechnung: Jahreskaltmiete nach Mietausfall minus Instandhaltung, Verwaltung und Rücklage, geteilt durch die Gesamt-Investition. Der eingestellte Mietausfall ist abgezogen; Steuern sind nicht enthalten."
                           activeId={activeTooltip}
                           onToggle={(id) => setActiveTooltip(activeTooltip === id ? null : id)}
                         />
@@ -1658,6 +1663,7 @@ export default function Home() {
                 </div>
 
                 <div className="metric-summary" aria-label="Laufende Kosten und Netto-Mietertrag">
+                  <div><span>Mietausfall / Jahr</span><strong>−{formatAcc(standardCase.vacancyAnnual)} €</strong></div>
                   <div>
                     <span>Laufende Kosten / Monat</span>
                     <strong>-{formatAcc(laufendeKostenPM)} €</strong>
@@ -1676,7 +1682,7 @@ export default function Home() {
                       <InfoTooltip
                         id="cfpm"
                         title="Cashflow pro Monat"
-                        text="Monatliche Kaltmiete minus laufende nicht umlagefähige Kosten und Annuität (Zins + Tilgung)."
+                        text="Monatliche Kaltmiete nach Mietausfall minus laufende nicht umlagefähige Kosten und Annuität (Zins + Tilgung)."
                         activeId={activeTooltip}
                         onToggle={(id) => setActiveTooltip(activeTooltip === id ? null : id)}
                       />
@@ -1691,7 +1697,7 @@ export default function Home() {
                       <InfoTooltip
                         id="cfpa"
                         title="Cashflow pro Jahr"
-                        text="Jahreskaltmiete minus laufende nicht umlagefähige Kosten und jährliche Annuität. Leerstand und Steuern sind nicht enthalten."
+                        text="Jahreskaltmiete nach Mietausfall minus laufende nicht umlagefähige Kosten und jährliche Annuität. Der eingestellte Mietausfall ist abgezogen; Steuern sind nicht enthalten."
                         activeId={activeTooltip}
                         onToggle={(id) => setActiveTooltip(activeTooltip === id ? null : id)}
                       />
@@ -1999,6 +2005,15 @@ export default function Home() {
                     </div>
                   </div>
 
+                  <div className="input-group input-optional">
+                    <label htmlFor="reverse-vacancy-percent">Mietausfall / Leerstand</label>
+                    <div className="input-wrapper">
+                      <input id="reverse-vacancy-percent" inputMode="decimal" type="text" value={rev.vacancyPercent} onChange={(e) => updateRev("vacancyPercent", e.target.value)} aria-describedby="reverse-vacancy-percent-help" aria-invalid={parseNumber(rev.vacancyPercent) < 0 || parseNumber(rev.vacancyPercent) > 100} />
+                      <span className="input-suffix">%</span>
+                    </div>
+                    <small id="reverse-vacancy-percent-help">0 bis 100 % der Soll-Jahresmiete. Bruttorendite und Kaufpreisfaktor verwenden weiterhin die Soll-Miete.</small>
+                  </div>
+
                   <div className="calculation-row">
                     <div className="input-group input-optional">
                       <label htmlFor="reverse-interest">Zins</label>
@@ -2161,3 +2176,4 @@ export default function Home() {
     </div>
   );
 }
+

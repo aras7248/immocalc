@@ -39,6 +39,13 @@ export interface AcquisitionCostParameters {
   hasBroker?: boolean;
 }
 
+export const DEFAULT_VACANCY_PERCENT = 2;
+
+/** Legacy API callers retain 0%; the UI and saved-object migration use 2%. */
+export function normalizeVacancyPercent(value = 0): number {
+  return Math.min(100, normalizeFiniteNonNegative(value));
+}
+
 export interface OperatingCostParameters {
   livingArea: number;
   maintenancePerSqmMonthly: number;
@@ -54,6 +61,7 @@ export interface StandardCalculationInput
   interestPercent: number;
   repaymentPercent: number;
   scenarioRentIncreasePercent?: number;
+  vacancyPercent?: number;
 }
 
 export interface ReverseCalculationInput
@@ -64,6 +72,7 @@ export interface ReverseCalculationInput
   interestPercent: number;
   repaymentPercent: number;
   scenarioRentIncreasePercent?: number;
+  vacancyPercent?: number;
 }
 
 export interface NormalizedAcquisitionCostParameters {
@@ -88,6 +97,7 @@ export interface NormalizedStandardCalculationInput
   interestPercent: number;
   repaymentPercent: number;
   scenarioRentIncreasePercent: number;
+  vacancyPercent: number;
 }
 
 export interface NormalizedReverseCalculationInput
@@ -98,6 +108,7 @@ export interface NormalizedReverseCalculationInput
   interestPercent: number;
   repaymentPercent: number;
   scenarioRentIncreasePercent: number;
+  vacancyPercent: number;
 }
 
 export interface AcquisitionCostsResult {
@@ -153,6 +164,8 @@ export interface RentCoverageChart {
 }
 
 export interface StandardCaseResult {
+  effectiveAnnualRent: number;
+  vacancyAnnual: number;
   annualRent: number;
   monthlyRent: number;
   noiAnnual: number;
@@ -186,6 +199,8 @@ export interface StandardCalculationResult {
 }
 
 export interface ReverseCaseResult {
+  effectiveAnnualRent: number;
+  vacancyAnnual: number;
   annualRent: number;
   monthlyRent: number;
   noiAnnual: number;
@@ -429,18 +444,23 @@ function calculateStandardCase(
   acquisitionCostEquity: number,
   operatingCosts: OperatingCostsResult,
   financing: FinancingResult,
+  vacancyPercent: number,
 ): StandardCaseResult {
   const monthlyRent = nonNegativeResult(annualRent / 12);
-  const noiAnnual = finiteResult(annualRent - operatingCosts.totalAnnual);
+  const effectiveAnnualRent = annualRent * (1 - vacancyPercent / 100);
+  const noiAnnual = finiteResult(effectiveAnnualRent - operatingCosts.totalAnnual);
   const cashFlowAnnual = finiteResult(noiAnnual - financing.annuityAnnual);
 
   return {
     annualRent,
+    effectiveAnnualRent,
+    vacancyAnnual: annualRent - effectiveAnnualRent,
     monthlyRent,
     noiAnnual,
     noiMonthly: finiteResult(noiAnnual / 12),
     cashFlowAnnual,
     cashFlowMonthly: finiteResult(cashFlowAnnual / 12),
+    // Gross yield and purchase-price factor intentionally use contractual rent.
     grossRentalYieldPercent: finiteResult(
       safeRatio(annualRent, purchasePrice) * 100,
     ),
@@ -457,7 +477,7 @@ function calculateStandardCase(
       safeRatio(monthlyRent, livingArea),
     ),
     chart: calculateRentCoverageChart(
-      annualRent,
+      effectiveAnnualRent,
       operatingCosts.totalAnnual,
       financing,
     ),
@@ -476,6 +496,7 @@ export function calculateStandard(
     annualRent: normalizeFiniteNonNegative(input.annualRent),
     interestPercent: normalizeFiniteNonNegative(input.interestPercent),
     repaymentPercent: normalizeFiniteNonNegative(input.repaymentPercent),
+    vacancyPercent: normalizeVacancyPercent(input.vacancyPercent),
     scenarioRentIncreasePercent: normalizeFiniteNonNegative(
       input.scenarioRentIncreasePercent ?? 0,
     ),
@@ -505,6 +526,7 @@ export function calculateStandard(
     acquisitionCosts.equityRequired,
     operatingCosts,
     financing,
+    normalizedInput.vacancyPercent,
   );
   const scenario = calculateStandardCase(
     scenarioAnnualRent,
@@ -514,6 +536,7 @@ export function calculateStandard(
     acquisitionCosts.equityRequired,
     operatingCosts,
     financing,
+    normalizedInput.vacancyPercent,
   );
 
   return {
@@ -543,7 +566,8 @@ function calculateReverseCase(
   operatingCosts: OperatingCostsResult,
   annuityPercent: number,
 ): ReverseCaseResult {
-  const noiAnnual = finiteResult(annualRent - operatingCosts.totalAnnual);
+  const effectiveAnnualRent = annualRent * (1 - normalizedInput.vacancyPercent / 100);
+  const noiAnnual = finiteResult(effectiveAnnualRent - operatingCosts.totalAnnual);
   const availableAnnuityAnnual = nonNegativeResult(noiAnnual);
   const maxPurchasePrice =
     annuityPercent > 0
@@ -560,6 +584,8 @@ function calculateReverseCase(
 
   return {
     annualRent,
+    effectiveAnnualRent,
+    vacancyAnnual: annualRent - effectiveAnnualRent,
     monthlyRent,
     noiAnnual,
     availableAnnuityAnnual,
@@ -592,6 +618,7 @@ export function calculateReverse(
     ),
     interestPercent: normalizeFiniteNonNegative(input.interestPercent),
     repaymentPercent: normalizeFiniteNonNegative(input.repaymentPercent),
+    vacancyPercent: normalizeVacancyPercent(input.vacancyPercent),
     scenarioRentIncreasePercent: normalizeFiniteNonNegative(
       input.scenarioRentIncreasePercent ?? 0,
     ),
@@ -608,10 +635,14 @@ export function calculateReverse(
     normalizedInput.offeredPurchasePrice,
     normalizedInput,
   );
-  const requiredAnnualRent = nonNegativeResult(
-    normalizedInput.offeredPurchasePrice * (annuityPercent / 100) +
-      operatingCosts.totalAnnual,
+  const effectiveRentFraction = 1 - normalizedInput.vacancyPercent / 100;
+  const requiredEffectiveRent = nonNegativeResult(
+    normalizedInput.offeredPurchasePrice * (annuityPercent / 100) + operatingCosts.totalAnnual,
   );
+  // At 100% vacancy no finite contractual rent can cover a positive outflow.
+  const requiredAnnualRent = effectiveRentFraction > 0
+    ? nonNegativeResult(requiredEffectiveRent / effectiveRentFraction)
+    : requiredEffectiveRent > 0 ? Number.MAX_VALUE : 0;
   const requiredMonthlyRent = nonNegativeResult(requiredAnnualRent / 12);
 
   return {
@@ -650,3 +681,4 @@ export function calculateReverse(
     },
   };
 }
+

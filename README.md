@@ -56,3 +56,21 @@ Die Ergebnisse sind Modellrechnungen und keine Finanz-, Steuer- oder Rechtsberat
 - Später kann ImmoCow auf einer Partner-App-Fläche ausschließlich auf ImmoCalc verlinken. Die App selbst und ihre Kundendaten werden dort nicht eingebettet.
 
 Weitere Details stehen in [docs/product-boundaries.md](docs/product-boundaries.md).
+
+
+## Laufende Überarbeitung nach Claude-Review (20.10.2026)
+
+### A1 und A2 – lokal implementiert, Freigabeprüfungen offen
+
+- Die Standard-Beispielrechnung berücksichtigt 1 €/m² Instandhaltung, 30 € Verwaltung und 50 € zusätzliche Rücklage pro Monat. Cashflow und Nettorendite sind vor Steuern ausgewiesen.
+- Standard- und Rückwärtsrechner enthalten Mietausfall/Leerstand (UI-Default 2 %). Der Abzug wirkt auf NOI, Cashflow, Deckung und erforderliche Angebotsmiete. Bruttorendite und Kaufpreisfaktor verwenden weiter die Soll-Miete.
+- Speicherformat 3 ergänzt fehlende Mietausfallwerte bei älteren Objekten mit 2 %. Explizit gespeicherte Werte einschließlich 0 % sowie bestehende Kostenwerte bleiben erhalten. Die Migration schreibt keine Datenbankzeilen beim Laden um.
+- Direkte Aufrufe der Rechenfunktionen ohne Mietausfallparameter behalten für die API-Kompatibilität den bisherigen Wert 0 %.
+- Referenz: 350.000 € Kaufpreis, 21.900 € Jahresmiete und die Beispielkosten ergeben −1.526 €/Jahr vor Mietausfall beziehungsweise −1.964 €/Jahr bei 2 % Mietausfall.
+- Stand der Prüfungen: 23 Node-Tests und TypeScript-Prüfung erfolgreich. ESLint und Produktionsbuild können wegen fehlender Abhängigkeiten noch nicht starten (`@eslint-community/eslint-utils`, `@swc/helpers`); der npm-Zugriff ist aus dieser Arbeitsumgebung nicht erreichbar. Die Aufgaben D1, A1 und A2 werden auf einem separaten Review-Branch geführt. Vollständige Prüfungen erfolgen über GitHub Actions. Browserprüfung und Produktionsveröffentlichung stehen aus.
+
+A3 bis F3 sind noch nicht umgesetzt.
+
+## Automatische Prüfungen (D1)
+
+GitHub Actions führt bei Push und Pull Request mit Node 22.18.0 zunächst `npm ci` und anschließend Typecheck, ESLint, Unit-Tests und den Produktionsbuild aus. Für den Build werden ausschließlich Supabase-Platzhalter verwendet; es erfolgen keine Tests gegen produktive Kundendaten. Die CI veröffentlicht die App nicht.

@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { saveObjectVersioned, ObjectSaveConflict } from "@/lib/saveObject";
 import { extractOcrFields } from "@/lib/ocr";
 import { parseNumber, formatAcc } from "@/lib/numberFormat";
 import { AppDialog } from "@/components/immocalc/AppDialog";
@@ -31,6 +32,7 @@ import { isRecord, mergeState, readSavedScenarioCostIncrease, SAVED_OBJECT_SCHEM
 interface SavedObject {
   id: string;
   db_id?: string;
+  updatedAt: string | null;
   date: string;
   calc: CalcState;
   rev: ReverseState;
@@ -273,6 +275,7 @@ function parseSavedObjectRow(row: unknown): SavedObject | null {
   return {
     id: row.id,
     db_id: row.id,
+    updatedAt: typeof row.updated_at === "string" ? row.updated_at : null,
     date: Number.isNaN(createdAt.getTime())
       ? new Date().toISOString().split("T")[0]
       : createdAt.toISOString().split("T")[0],
@@ -293,7 +296,7 @@ function describePriceLimit(result: ReverseCaseResult): string {
 }
 
 export default function Home() {
-  const { request: dialogRequest, close: closeDialog, notify, confirmAction, promptValue } = useAppDialog();
+  const { request: dialogRequest, close: closeDialog, ask, notify, confirmAction, promptValue } = useAppDialog();
   // === STANDARD KALKULATION STATE ===
   const [calc, setCalc] = useState<CalcState>(initialCalcState);
   const [rev, setRev] = useState<ReverseState>(initialRevState);
@@ -863,25 +866,7 @@ export default function Home() {
         }
       };
 
-      if (existingDbId) {
-        const { error } = await supabase
-          .from('immocalc_saved_objects')
-          .update(payload)
-          .eq('id', existingDbId)
-          .eq('user_id', user.id);
-
-        if (error) {
-          throw error;
-        }
-      } else {
-        const { error } = await supabase
-          .from('immocalc_saved_objects')
-          .insert(payload);
-
-        if (error) {
-          throw error;
-        }
-      }
+      await saveObjectVersioned(supabase, payload, existingDbId ? {id:existingDbId,updatedAt:savedObjects[existingIndex].updatedAt} : undefined);
 
       const { data, error } = await supabase
         .from('immocalc_saved_objects')
@@ -902,6 +887,20 @@ export default function Home() {
       setIsSavedObjectsOpen(true);
       setIsObjektInfoOpen(false);
     } catch (e) {
+      if (e instanceof ObjectSaveConflict) {
+        const choice=await ask({kind:'confirm',message:'Das gespeicherte Objekt wurde zwischenzeitlich geändert. Wie möchtest du fortfahren?',choices:[{label:'Neu laden',value:'reload'},{label:'Als Kopie speichern',value:'copy'}]});
+        try {
+          if(choice==='reload'&&existingDbId){
+            const {data,error}=await supabase.from('immocalc_saved_objects').select('*').eq('id',existingDbId).eq('user_id',user.id).single();
+            if(error)throw error;const loaded=parseSavedObjectRow(data);if(loaded){handleLoadObject(loaded);setSavedObjects(prev=>prev.map(o=>o.id===loaded.id?loaded:o));}
+          } else if(choice==='copy'){
+            const copyName=nameToSave+' (Kopie)';
+            await saveObjectVersioned(supabase,{user_id:user.id,calc_data:{schemaVersion:SAVED_OBJECT_SCHEMA_VERSION,calc:{...calc,objektname:copyName},rev,mieten,rentIncrease,scenarioCostIncreasePercent}});
+            updateCalc('objektname',copyName);void notify('Die aktuellen Eingaben wurden als separates Objekt gespeichert.');
+          }
+        }catch{void notify('Die Konfliktlösung ist fehlgeschlagen. Deine aktuellen Eingaben bleiben erhalten.');}
+        return;
+      }
       console.error("Speichern fehlgeschlagen:", e);
       void notify("Das Objekt konnte nicht gespeichert werden. Bitte prüfe deine Verbindung und versuche es erneut.");
     } finally {

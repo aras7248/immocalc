@@ -22,10 +22,19 @@ test("A2: explicit zero and full vacancy survive saved-state loading", () => {
 
 test("A3: legacy saved scenario costs default to zero and saved values survive loading", async () => {
   const { readSavedScenarioCostIncrease } = await import("./savedState.ts");
-  for (const value of [undefined, null, "2", NaN, Infinity, -1]) {
+  for (const value of [undefined, null, "2", NaN, Infinity]) {
     assert.equal(readSavedScenarioCostIncrease(value), 0);
   }
   assert.equal(readSavedScenarioCostIncrease(2.5), 2.5);
   assert.equal(readSavedScenarioCostIncrease(0), 0);
   assert.equal(readSavedScenarioCostIncrease(150), 100);
+});
+
+test("A4: negative scenario changes survive JSON save and reload", async () => {
+  const { normalizeScenarioPercent } = await import("./scenario.ts");
+  const { readSavedScenarioCostIncrease } = await import("./savedState.ts");
+  const payload = JSON.parse(JSON.stringify({ rentIncrease: -12.5, scenarioCostIncreasePercent: -2.5 }));
+  assert.equal(normalizeScenarioPercent(payload.rentIncrease), -12.5);
+  assert.equal(readSavedScenarioCostIncrease(payload.scenarioCostIncreasePercent), -2.5);
+  assert.equal(readSavedScenarioCostIncrease(-75), -50);
 });

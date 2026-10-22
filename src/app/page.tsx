@@ -15,6 +15,7 @@ import {
   DEFAULT_VACANCY_PERCENT,
 } from '@/lib/calculations';
 import { supabase } from '@/lib/supabase';
+import { normalizeScenarioPercent, SCENARIO_PERCENT_MIN, SCENARIO_PERCENT_MAX } from '@/lib/scenario';
 import { isRecord, mergeState, readSavedScenarioCostIncrease, SAVED_OBJECT_SCHEMA_VERSION } from '@/lib/savedState';
 
 // Interface for saved objects
@@ -262,9 +263,7 @@ function parseSavedObjectRow(row: unknown): SavedObject | null {
 
   const payload = row.calc_data;
   const createdAt = typeof row.created_at === "string" ? new Date(row.created_at) : new Date();
-  const parsedRentIncrease = typeof payload.rentIncrease === "number" && Number.isFinite(payload.rentIncrease)
-    ? Math.min(Math.max(payload.rentIncrease, 0), 50)
-    : 0;
+  const parsedRentIncrease = normalizeScenarioPercent(payload.rentIncrease);
 
   const parsedCalc = mergeState(initialCalcState, payload.calc);
   const parsedRev = mergeState(initialRevState, payload.rev);
@@ -653,8 +652,11 @@ export default function Home() {
   const mietePA = parseNumber(calc.mietePA) || 0;
   const zins = parseNumber(calc.zins) || 0;
   const tilgung = parseNumber(calc.tilgung) || 0;
-  const [rentIncrease, setRentIncrease] = useState<number>(0);
-  const [scenarioCostIncreasePercent, setScenarioCostIncreasePercent] = useState(0);
+  // Preserve intermediate edits such as "-" so negative values can be typed naturally.
+  const [rentIncreaseInput, setRentIncreaseInput] = useState("0");
+  const [scenarioCostInput, setScenarioCostInput] = useState("0");
+  const rentIncrease = normalizeScenarioPercent(parseNumber(rentIncreaseInput));
+  const scenarioCostIncreasePercent = normalizeScenarioPercent(parseNumber(scenarioCostInput));
   const isScenarioActive = rentIncrease !== 0 || scenarioCostIncreasePercent !== 0;
   const grunderwerbsteuer: Record<string, number> = LAND_TRANSFER_TAX_RATES_2026;
   const standardResult = calculateStandard({
@@ -918,8 +920,8 @@ export default function Home() {
       angebotspreis: obj.calc.kaufpreis,
     });
     setMieten(obj.mieten || [""]);
-    setRentIncrease(obj.rentIncrease || 0);
-    setScenarioCostIncreasePercent(obj.scenarioCostIncreasePercent ?? 0);
+    setRentIncreaseInput(String(normalizeScenarioPercent(obj.rentIncrease)));
+    setScenarioCostInput(String(normalizeScenarioPercent(obj.scenarioCostIncreasePercent)));
   };
 
   const handleClearData = () => {
@@ -928,8 +930,8 @@ export default function Home() {
       setRev(emptyRevState);
       setSyncedFields({});
       setMieten([""]);
-      setRentIncrease(0);
-      setScenarioCostIncreasePercent(0);
+      setRentIncreaseInput("0");
+      setScenarioCostInput("0");
       setScanResult(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       setIsFlashActive(true);
@@ -1502,12 +1504,12 @@ export default function Home() {
                   </div>
 
                 <div className="input-group input-optional">
-                    <label htmlFor="standard-scenario-cost-increase">Kostensteigerung im Szenario</label>
+                    <label htmlFor="standard-scenario-cost-increase">Kostenänderung im Szenario (−50 % bis +100 %)</label>
                     <div className="input-wrapper">
-                      <input id="standard-scenario-cost-increase" type="number" min="0" max="100" step="0.1" value={scenarioCostIncreasePercent} onChange={(e) => setScenarioCostIncreasePercent(readSavedScenarioCostIncrease(e.target.valueAsNumber))} aria-describedby="standard-scenario-cost-increase-help" />
+                      <input id="standard-scenario-cost-increase" type="text" inputMode="text" value={scenarioCostInput} onChange={(e) => setScenarioCostInput(e.target.value)} onBlur={() => setScenarioCostInput(formatAcc(scenarioCostIncreasePercent))} onKeyDown={handleEnterKey} aria-describedby="standard-scenario-cost-increase-help" />
                       <span className="input-suffix">%</span>
                     </div>
-                    <small id="standard-scenario-cost-increase-help">Einmalige Änderung von Instandhaltung, Verwaltung und Rücklage im Szenario. Keine jährliche Steigerung; die Basisrechnung bleibt unverändert.</small>
+                    <small id="standard-scenario-cost-increase-help">Negative Werte senken die Kosten. Einmalige Änderung von Instandhaltung, Verwaltung und Rücklage im Szenario. Keine jährliche Steigerung; die Basisrechnung bleibt unverändert. Werte werden auf −50 % bis +100 % begrenzt.</small>
                   </div>
 
                 <h3 className="cluster-title">5. Finanzierung</h3>
@@ -2108,33 +2110,41 @@ export default function Home() {
                       <span style={{ color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 600 }}>Szenario Analyse</span>
                       <button
                         type="button"
-                        onClick={() => setRentIncrease(15)}
+                        onClick={() => setRentIncreaseInput("15")}
                         style={{ background: 'var(--success-strong)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', padding: '0.35rem 0.65rem', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 700 }}
                       >
                         +15% Fix
                       </button>
                     </div>
                     <div className="input-group input-optional">
-                    <label htmlFor="reverse-scenario-cost-increase">Kostensteigerung im Szenario</label>
+                    <label htmlFor="reverse-scenario-cost-increase">Kostenänderung im Szenario (−50 % bis +100 %)</label>
                     <div className="input-wrapper">
-                      <input id="reverse-scenario-cost-increase" type="number" min="0" max="100" step="0.1" value={scenarioCostIncreasePercent} onChange={(e) => setScenarioCostIncreasePercent(readSavedScenarioCostIncrease(e.target.valueAsNumber))} aria-describedby="reverse-scenario-cost-increase-help" />
+                      <input id="reverse-scenario-cost-increase" type="text" inputMode="text" value={scenarioCostInput} onChange={(e) => setScenarioCostInput(e.target.value)} onBlur={() => setScenarioCostInput(formatAcc(scenarioCostIncreasePercent))} onKeyDown={handleEnterKey} aria-describedby="reverse-scenario-cost-increase-help" />
                       <span className="input-suffix">%</span>
                     </div>
-                    <small id="reverse-scenario-cost-increase-help">Einmalige Änderung von Instandhaltung, Verwaltung und Rücklage im Szenario. Keine jährliche Steigerung; die Basisrechnung bleibt unverändert.</small>
+                    <small id="reverse-scenario-cost-increase-help">Negative Werte senken die Kosten. Einmalige Änderung von Instandhaltung, Verwaltung und Rücklage im Szenario. Keine jährliche Steigerung; die Basisrechnung bleibt unverändert. Werte werden auf −50 % bis +100 % begrenzt.</small>
                   </div>
                     <label htmlFor="rent-increase" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 500 }}>
-                      <span>Mietsteigerung (+{rentIncrease}%)</span>
+                      <span>Mietänderung ({rentIncrease > 0 ? "+" : ""}{formatAcc(rentIncrease)} %)</span>
                       <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Max Kaufpreis neu: <span className="positive" style={{ fontWeight: 700 }}>{formatAcc(revKaufpreisNeu)} €</span></span>
                       <div className="scenario-note">
-                        <span>Bei {rentIncrease}% Miet- und {scenarioCostIncreasePercent}% Kostensteigerung: <strong>{formatAcc(revKaufpreisNeu)} €</strong></span>
+                        <span>Bei {formatAcc(rentIncrease)} % Miet- und {formatAcc(scenarioCostIncreasePercent)} % Kostenänderung: <strong>{formatAcc(revKaufpreisNeu)} €</strong></span>
                       </div>
                     </label>
+                    <div className="input-group input-optional">
+                      <label htmlFor="rent-change-input">Mietänderung eingeben (−50 % bis +100 %)</label>
+                      <div className="input-wrapper">
+                        <input id="rent-change-input" type="text" inputMode="text" value={rentIncreaseInput} onChange={(e) => setRentIncreaseInput(e.target.value)} onBlur={() => setRentIncreaseInput(formatAcc(rentIncrease))} onKeyDown={handleEnterKey} aria-describedby="rent-change-help" />
+                        <span className="input-suffix">%</span>
+                      </div>
+                      <small id="rent-change-help">Negative Werte senken die Soll-Miete. Werte außerhalb des Bereichs werden auf −50 % beziehungsweise +100 % begrenzt.</small>
+                    </div>
                     <input
                       id="rent-increase"
                       type="range"
-                      min="0" max="50" step="1"
+                      min={SCENARIO_PERCENT_MIN} max={SCENARIO_PERCENT_MAX} step="0.1"
                       value={rentIncrease}
-                      onChange={(e) => setRentIncrease(parseInt(e.target.value))}
+                      onChange={(e) => setRentIncreaseInput(e.target.value)}
                       style={{ width: '100%', marginTop: '0.5rem', accentColor: 'var(--success-color)', height: '6px', cursor: 'pointer' }}
                     />
                   </div>

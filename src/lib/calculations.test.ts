@@ -332,10 +332,47 @@ test("A3: reverse scenario includes increased costs and round-trips to break-eve
   closeTo(standard.scenario.cashFlowAnnual, 0);
 });
 
+// A4: Negative values are valid scenarios; only non-finite values default to zero.
 test("A3: invalid scenario cost input defaults to zero", () => {
-  for (const scenarioCostIncreasePercent of [NaN, Infinity, -1]) {
+  for (const scenarioCostIncreasePercent of [NaN, Infinity]) {
     const result = calculateStandard({ ...commonInput, purchasePrice: 350_000, annualRent: 21_900, scenarioCostIncreasePercent });
     assert.equal(result.input.scenarioCostIncreasePercent, 0);
     assert.deepEqual(result.scenarioOperatingCosts, result.operatingCosts);
+  }
+});
+
+test("A4: falling rents and costs affect only the scenario", () => {
+  const input = { ...commonInput, purchasePrice: 350_000, annualRent: 21_900, vacancyPercent: 2 };
+  const baseline = calculateStandard(input);
+  const result = calculateStandard({ ...input, scenarioRentIncreasePercent: -10, scenarioCostIncreasePercent: -20 });
+  assert.deepEqual(result.base, baseline.base);
+  closeTo(result.scenario.annualRent, 21_900 * 0.9);
+  closeTo(result.scenario.effectiveAnnualRent, 21_900 * 0.9 * 0.98);
+  closeTo(result.scenarioOperatingCosts.totalAnnual, 4_176 * 0.8);
+  closeTo(result.scenario.cashFlowAnnual, 21_900 * 0.9 * 0.98 - 4_176 * 0.8 - 19_250);
+  closeTo(result.scenario.chart.requiredOutflowAnnual, 4_176 * 0.8 + 19_250);
+});
+
+test("A4: signed reverse scenarios round-trip to zero cashflow", () => {
+  for (const scenarioRentIncreasePercent of [-50, -12.5, 0, 100]) {
+    for (const scenarioCostIncreasePercent of [-50, -2.5, 0, 100]) {
+      const input = { ...commonInput, vacancyPercent: 2, scenarioRentIncreasePercent, scenarioCostIncreasePercent };
+      const reverse = calculateReverse({ ...input, targetAnnualRent: 21_900 });
+      const standard = calculateStandard({ ...input, purchasePrice: reverse.scenario.maxPurchasePrice, annualRent: 21_900 });
+      closeTo(standard.scenario.cashFlowAnnual, 0);
+    }
+  }
+});
+
+test("A4: both calculators bound rent and cost changes consistently", () => {
+  for (const [raw, expected] of [[-75, -50], [-50, -50], [75, 75], [125, 100]]) {
+    const standard = calculateStandard({ ...commonInput, purchasePrice: 350_000, annualRent: 21_900, scenarioRentIncreasePercent: raw, scenarioCostIncreasePercent: raw });
+    const reverse = calculateReverse({ ...commonInput, targetAnnualRent: 21_900, scenarioRentIncreasePercent: raw, scenarioCostIncreasePercent: raw });
+    for (const input of [standard.input, reverse.input]) {
+      assert.equal(input.scenarioRentIncreasePercent, expected);
+      assert.equal(input.scenarioCostIncreasePercent, expected);
+    }
+    closeTo(standard.scenarioOperatingCosts.totalAnnual, 4_176 * (1 + expected / 100));
+    assert.deepEqual(reverse.scenarioOperatingCosts, standard.scenarioOperatingCosts);
   }
 });

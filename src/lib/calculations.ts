@@ -1,3 +1,5 @@
+import { normalizeScenarioPercent } from "./scenario.ts";
+
 /**
  * Pure real-estate calculations used by the standard and reverse calculators.
  *
@@ -515,8 +517,8 @@ export function calculateStandard(
     interestPercent: normalizeFiniteNonNegative(input.interestPercent),
     repaymentPercent: normalizeFiniteNonNegative(input.repaymentPercent),
     vacancyPercent: normalizeVacancyPercent(input.vacancyPercent),
-    scenarioCostIncreasePercent: normalizeFiniteNonNegative(input.scenarioCostIncreasePercent ?? 0),
-    scenarioRentIncreasePercent: normalizeFiniteNonNegative(
+    scenarioCostIncreasePercent: normalizeScenarioPercent(input.scenarioCostIncreasePercent ?? 0),
+    scenarioRentIncreasePercent: normalizeScenarioPercent(
       input.scenarioRentIncreasePercent ?? 0,
     ),
   };
@@ -640,8 +642,8 @@ export function calculateReverse(
     interestPercent: normalizeFiniteNonNegative(input.interestPercent),
     repaymentPercent: normalizeFiniteNonNegative(input.repaymentPercent),
     vacancyPercent: normalizeVacancyPercent(input.vacancyPercent),
-    scenarioCostIncreasePercent: normalizeFiniteNonNegative(input.scenarioCostIncreasePercent ?? 0),
-    scenarioRentIncreasePercent: normalizeFiniteNonNegative(
+    scenarioCostIncreasePercent: normalizeScenarioPercent(input.scenarioCostIncreasePercent ?? 0),
+    scenarioRentIncreasePercent: normalizeScenarioPercent(
       input.scenarioRentIncreasePercent ?? 0,
     ),
   };

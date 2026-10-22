@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { extractOcrFields } from "@/lib/ocr";
 import { parseNumber, formatAcc } from "@/lib/numberFormat";
 import { AppDialog } from "@/components/immocalc/AppDialog";
 import { useAppDialog } from "@/hooks/useAppDialog";
@@ -612,28 +613,7 @@ export default function Home() {
   };
 
   const processOcrText = (text: string) => {
-    // Einfache Heuristiken für Immobilien-Daten
-    const results: Record<string, string> = {};
-
-    // Kaufpreis-Suche (nach € oder EUR, oft fünf- bis siebenstellig)
-    const priceMatch = text.match(/(?:Kaufpreis|Preis|Festpreis)[:\s]*([\d\.,]+)\s*(?:€|EUR)/i) ||
-      text.match(/([\d\.]{5,})\s*€/);
-    if (priceMatch) results.kaufpreis = priceMatch[1].trim();
-
-    // Wohnfläche (m2 oder qm)
-    const areaMatch = text.match(/([\d\.,]+)\s*(?:m[²2]|qm)/i) ||
-      text.match(/(?:Wohnfläche)[:\s]*([\d\.,]+)/i);
-    if (areaMatch) results.wohnflaeche = areaMatch[1].trim();
-
-    // Kaltmiete
-    const rentMatch = text.match(/(?:Kaltmiete|Miete)[:\s]*([\d\.,]+)\s*€/i) ||
-      text.match(/(?:Einnahmen)[:\s]*([\d\.,]+)\s*€/i);
-    if (rentMatch) results.mietePM = rentMatch[1].trim();
-
-    // Baujahr (vierstellig, 18xx, 19xx, 20xx)
-    const yearMatch = text.match(/(?:Baujahr|Bauw\.)[:\s]*(\d{4})/i) ||
-      text.match(/\b(?:18|19|20)\d{2}\b/);
-    if (yearMatch) results.baujahr = yearMatch[1] || yearMatch[0];
+    const results = extractOcrFields(text);
 
     if (Object.keys(results).length > 0) {
       setScanResult(results);
@@ -2294,36 +2274,37 @@ export default function Home() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
               {scanResult.kaufpreis && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Kaufpreis:</span>
+                  <span style={{ color: 'var(--text-muted)' }}>Kaufpreis: bitte prüfen</span>
                   <strong style={{ color: 'var(--text-main)' }}>{scanResult.kaufpreis} €</strong>
                 </div>
               )}
               {scanResult.wohnflaeche && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Wohnfläche:</span>
+                  <span style={{ color: 'var(--text-muted)' }}>Wohnfläche: bitte prüfen</span>
                   <strong style={{ color: 'var(--text-main)' }}>{scanResult.wohnflaeche} m²</strong>
                 </div>
               )}
               {scanResult.mietePM && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Kaltmiete:</span>
+                  <span style={{ color: 'var(--text-muted)' }}>Kaltmiete: bitte prüfen</span>
                   <strong style={{ color: 'var(--text-main)' }}>{scanResult.mietePM} €</strong>
                 </div>
               )}
               {scanResult.baujahr && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Baujahr:</span>
+                  <span style={{ color: 'var(--text-muted)' }}>Baujahr: bitte prüfen</span>
                   <strong style={{ color: 'var(--text-main)' }}>{scanResult.baujahr}</strong>
                 </div>
               )}
             </div>
 
+            <p>Jedes erkannte Feld bitte prüfen und bei Bedarf nach der Übernahme korrigieren.</p>
             <div className="dialog-actions">
               <button type="button" className="dialog-button dialog-button--secondary" onClick={() => setScanResult(null)}>
                 Abbrechen
               </button>
               <button type="button" className="dialog-button dialog-button--primary" onClick={applyScanResult}>
-                Werte übernehmen
+                Geprüfte Werte übernehmen
               </button>
             </div>
           </div>

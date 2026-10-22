@@ -25,53 +25,16 @@ export const InfoTooltip = ({ id, title, text, activeId, onToggle }: { id: strin
   );
 };
 
-// Wiederverwendbare klappbare Sektion
 export const CollapsibleSection = ({ title, icon, children, defaultOpen = true, badge }: {
-  title: string, icon: React.ReactNode, children: React.ReactNode, defaultOpen?: boolean, badge?: string | number
+ title:string;icon:React.ReactNode;children:React.ReactNode;defaultOpen?:boolean;badge?:string|number
 }) => {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-  const contentId = useId();
-  return (
-    <div style={{ marginBottom: isOpen ? 0 : '-0.5rem' }}>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        aria-expanded={isOpen}
-        aria-controls={contentId}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', gap: '0.5rem',
-          padding: '0.6rem 1rem',
-          background: isOpen ? 'var(--glass-bg)' : 'var(--glass-bg)',
-          border: `1px solid ${isOpen ? 'var(--accent-color)' : 'var(--glass-border)'}`,
-          borderRadius: isOpen ? '16px 16px 0 0' : '16px',
-          cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600,
-          color: isOpen ? 'var(--accent-color)' : 'var(--text-main)',
-          transition: 'all 0.25s ease',
-          backdropFilter: 'blur(12px)'
-        }}
-      >
-        {icon}
-        <span style={{ flex: 1, textAlign: 'left' }}>{title}</span>
-        {badge && !isOpen && (
-          <span style={{
-            background: 'var(--accent-color)', color: '#fff', borderRadius: '999px',
-            padding: '0.1rem 0.5rem', fontSize: '0.7rem', fontWeight: 700
-          }}>{badge}</span>
-        )}
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-          style={{ transition: 'transform 0.25s', transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
-          <polyline points="6 9 12 15 18 9"></polyline>
-        </svg>
-      </button>
-      {isOpen && (
-        <div id={contentId} style={{
-          border: '1px solid var(--accent-color)', borderTop: 'none',
-          borderRadius: '0 0 16px 16px', overflow: 'hidden',
-          animation: 'fadeIn 0.2s ease-out'
-        }}>
-          {children}
-        </div>
-      )}
-    </div>
-  );
+ const [isOpen,setIsOpen]=useState(defaultOpen);const contentId=useId();
+ return <div className={`collapsible ${isOpen?'is-open':'is-closed'}`}>
+  <button type="button" className="collapsible__button" onClick={()=>setIsOpen(v=>!v)} aria-expanded={isOpen} aria-controls={contentId}>
+   {icon}<span className="collapsible__title">{title}</span>
+   {badge&&!isOpen&&<span className="collapsible__badge">{badge}</span>}
+   <svg className="collapsible__chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+  </button>
+  {isOpen&&<div id={contentId} className="collapsible__content">{children}</div>}
+ </div>;
 };
-

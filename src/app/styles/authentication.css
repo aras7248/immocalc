@@ -1,0 +1,315 @@
+/* ─── ImmoCow-style authentication ──────────────────────── */
+.auth-page {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 1rem;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(59, 130, 246, 0.13), transparent 38%),
+    radial-gradient(circle at 88% 82%, rgba(16, 185, 129, 0.11), transparent 38%),
+    var(--bg-primary);
+}
+
+.dark .auth-page {
+  background:
+    radial-gradient(circle at 12% 18%, rgba(59, 130, 246, 0.16), transparent 40%),
+    radial-gradient(circle at 88% 82%, rgba(16, 185, 129, 0.12), transparent 40%),
+    var(--bg-primary);
+}
+
+.auth-loading {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.auth-loading .spinner-small {
+  border-color: rgba(59, 130, 246, 0.2);
+  border-top-color: var(--accent-strong);
+}
+
+.auth-orb {
+  display: none;
+}
+
+.auth-orb--blue {
+  left: -12%;
+  top: -18%;
+  background: var(--accent);
+}
+
+.auth-orb--green {
+  right: -12%;
+  bottom: -18%;
+  background: var(--success);
+}
+
+.auth-card {
+  position: relative;
+  width: min(100%, 512px);
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  overflow: hidden;
+  border: 1px solid rgba(147, 197, 253, 0.55);
+  border-radius: var(--radius-2xl);
+  background: var(--card-bg);
+  box-shadow: 0 30px 90px rgba(15, 23, 42, 0.12);
+}
+
+.dark .auth-card {
+  border-color: var(--border);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.34);
+}
+
+.auth-card__accent {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: linear-gradient(90deg, var(--accent), #93c5fd, var(--success));
+}
+
+.auth-card__topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.auth-badge {
+  min-height: 32px;
+  padding: 0.35rem 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  border-radius: var(--radius-full);
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--accent-strong);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.auth-brand {
+  margin: 1rem auto 0.25rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.auth-brand .brand-logo {
+  width: auto;
+  height: 92px;
+  object-fit: contain;
+}
+
+.auth-product-name {
+  margin-top: 0.25rem;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.auth-heading {
+  margin: 0.75rem auto 1.75rem;
+  max-width: 420px;
+  text-align: center;
+}
+
+.auth-heading h1 {
+  font-family: var(--font-outfit), Outfit, var(--font-inter), Inter, sans-serif;
+  font-size: clamp(1.8rem, 5vw, 2.2rem);
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+}
+
+.auth-heading p {
+  margin-top: 0.55rem;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.auth-heading .auth-account-hint {
+  margin-top: 0.6rem;
+  color: var(--accent-strong);
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.auth-field label {
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.auth-field input {
+  width: 100%;
+  min-height: 54px;
+  padding: 0 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card-bg);
+  color: var(--text-primary);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.auth-field input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.62;
+}
+
+.auth-field input:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.14);
+}
+
+.auth-field input:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.auth-message {
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.auth-message--error {
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--error-strong);
+}
+
+.auth-submit {
+  width: 100%;
+  min-height: 56px;
+  margin-top: 0.25rem;
+  padding: 0.8rem 1.25rem;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--accent-strong);
+  color: var(--accent-text);
+  box-shadow: 0 16px 36px rgba(37, 99, 235, 0.22);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 800;
+  transition: filter 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+}
+
+.auth-submit:hover:not(:disabled) {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+  box-shadow: 0 20px 42px rgba(37, 99, 235, 0.28);
+}
+
+.auth-submit:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.auth-trust {
+  margin-top: 1.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-secondary) 65%, transparent);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.auth-trust span {
+  padding: 0.3rem 0.6rem;
+  border-radius: var(--radius-full);
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  box-shadow: 0 1px 5px rgba(15, 23, 42, 0.06);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+@media (max-width: 520px) {
+  .app-topbar {
+    align-items: flex-start;
+  }
+
+  .app-brand__eyebrow {
+    display: none;
+  }
+
+  .app-topbar__actions {
+    gap: 0.25rem;
+  }
+
+  .app-action--secondary {
+    display: none;
+  }
+
+  .app-signout {
+    width: 44px;
+    padding: 0;
+    overflow: hidden;
+    color: transparent;
+    font-size: 0;
+  }
+
+  .app-signout::after {
+    content: "Aus";
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    font-weight: 800;
+  }
+
+  .metric-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-rent-checker {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .auth-card {
+    border-radius: var(--radius-xl);
+  }
+}
+
+@media (max-width: 420px) {
+  .app-brand__title,
+  .app-brand__eyebrow,
+  .app-action--object {
+    display: none;
+  }
+
+  .app-brand__mark {
+    width: 46px;
+    height: 46px;
+  }
+}
+

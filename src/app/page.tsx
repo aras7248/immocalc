@@ -17,6 +17,7 @@ import { parseNumber, formatAcc } from "@/lib/numberFormat";
 import { AppDialog } from "@/components/immocalc/AppDialog";
 import { useAppDialog } from "@/hooks/useAppDialog";
 import { validateFields } from "@/lib/validation";
+import { ModelNotice } from "@/components/immocalc/ModelNotice";
 import { ProjectionPanel } from "@/components/immocalc/ProjectionPanel";
 import { useState, useEffect, useRef } from "react";
 import { ActivePropertyBar } from '@/components/immocalc/ActivePropertyBar';
@@ -900,6 +901,7 @@ export default function Home() {
       {!hasPremiumAccess(entitlement.level) && <p role="status">{entitlement.loading?'Tarifberechtigung wird geprüft …':entitlement.error?'Tarifberechtigung konnte nicht geprüft werden. Bitte prüfe die Einrichtung der ImmoCalc-Migration.':'Neue Objekte und Premium-Analysen benötigen eine freigeschaltete ImmoCalc-Berechtigung. Eine Buchung ist noch nicht verfügbar.'}</p>}
       {activeTab === 'premium' && (
         hasPremiumAccess(entitlement.level) ? <section id="premium-panel" role="tabpanel" aria-labelledby="premium-tab">
+          <ModelNotice />
           <ProjectionPanel input={standardResult.input} settings={premiumSettings} onChange={value=>setPremiumSettings(readProjectionSettings(value))}/>
           <section className="glass-panel"><h2>Ziel-Rückwärtsrechnung vor Steuern</h2>
                   <div className="calculation-row" aria-label="Ziel der Rückwärtsrechnung">
@@ -1271,6 +1273,7 @@ export default function Home() {
             badge={`${formatAcc(roe)}% CoC`}
           >
             <section className="results-sticky" hidden={criticalInputError}>
+              <ModelNotice />
               <div className="glass-panel" style={{ padding: '1rem', background: 'var(--output-calc-bg)', border: 'none', borderRadius: 0, boxShadow: 'none' }}>
                 <div style={{ position: 'relative', marginBottom: '1.5rem', borderBottom: '1px solid var(--output-calc-border)', paddingBottom: '0.75rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.25rem' }}>
@@ -1790,6 +1793,7 @@ export default function Home() {
             </CollapsibleSection>
 
             <section className="results-sticky" hidden={criticalInputError}>
+              <ModelNotice />
               <CollapsibleSection
                 title="Kaufpreis bei Zielvorgabe"
                 icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>}

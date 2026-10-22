@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
+import { ModelNotice } from "@/components/immocalc/ModelNotice";
 import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 
@@ -57,9 +58,11 @@ export default function RootLayout({
         <ThemeProvider>
           <AuthProvider>
             {children}
+            <footer className="site-footer"><ModelNotice /></footer>
           </AuthProvider>
         </ThemeProvider>
       </body>
     </html>
   );
 }
+

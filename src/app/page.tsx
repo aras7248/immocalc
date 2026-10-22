@@ -81,6 +81,7 @@ interface CalcState {
   kaufpreis: string;
   bundesland: string;
   notarProzent: string;
+  movableItemsAmount: string;
   hasMakler: boolean;
   maklerProzent: string;
   zins: string;
@@ -106,6 +107,7 @@ interface ReverseState {
   angebotspreis: string;
   bundesland: string;
   notarProzent: string;
+  movableItemsAmount: string;
   hasMakler: boolean;
   maklerProzent: string;
   zins: string;
@@ -201,6 +203,7 @@ const initialCalcState: CalcState = {
   kaufpreis: "350.000,00",
   bundesland: "NRW",
   notarProzent: "2,00",
+  movableItemsAmount: "0,00",
   hasMakler: true,
   maklerProzent: "3,57",
   zins: "4,00",
@@ -225,6 +228,7 @@ const initialRevState: ReverseState = {
   angebotspreis: "350.000,00",
   bundesland: "NRW",
   notarProzent: "2,00",
+  movableItemsAmount: "0,00",
   hasMakler: true,
   maklerProzent: "3,57",
   zins: "4,00",
@@ -245,6 +249,7 @@ const emptyCalcState: CalcState = {
   kaufpreis: "",
   bundesland: "NRW",
   notarProzent: "",
+  movableItemsAmount: "0,00",
   hasMakler: false,
   maklerProzent: "",
   zins: "",
@@ -269,6 +274,7 @@ const emptyRevState: ReverseState = {
   angebotspreis: "",
   bundesland: "NRW",
   notarProzent: "",
+  movableItemsAmount: "0,00",
   hasMakler: false,
   maklerProzent: "",
   zins: "",
@@ -693,6 +699,7 @@ export default function Home() {
   const standardResult = calculateStandard({
     federalState: calc.bundesland,
     notaryPercent: parseNumber(calc.notarProzent),
+    movableItemsAmount: parseNumber(calc.movableItemsAmount),
     brokerPercent: parseNumber(calc.maklerProzent),
     hasBroker: calc.hasMakler,
     purchasePrice: kaufpreis,
@@ -777,6 +784,7 @@ export default function Home() {
   const reverseResult = calculateReverse({
     federalState: rev.bundesland,
     notaryPercent: parseNumber(rev.notarProzent),
+    movableItemsAmount: parseNumber(rev.movableItemsAmount),
     brokerPercent: parseNumber(rev.maklerProzent),
     hasBroker: rev.hasMakler,
     targetAnnualRent: parseNumber(rev.zielMietePA),
@@ -813,6 +821,7 @@ export default function Home() {
       ...prev,
       bundesland: calc.bundesland,
       notarProzent: calc.notarProzent,
+      movableItemsAmount: calc.movableItemsAmount,
       hasMakler: calc.hasMakler,
       maklerProzent: calc.maklerProzent,
       zins: calc.zins,
@@ -1301,7 +1310,7 @@ export default function Home() {
 
                 <div className="calculation-row">
                   <div className="input-group input-optional">
-                    <label htmlFor="notary-percent">Notar</label>
+                    <label htmlFor="notary-percent">Notar und Grundbuch</label>
                     <div className="input-wrapper">
                       <input
                         id="notary-percent"
@@ -1511,6 +1520,7 @@ export default function Home() {
                   </div>
                 )}
 
+<div className="input-group input-optional"><label htmlFor="calc-movable">Mitverkaufte bewegliche Gegenstände (€)</label><input id="calc-movable" type="text" inputMode="decimal" value={calc.movableItemsAmount} onChange={e=>updateCalc('movableItemsAmount',e.target.value)}/><small>Nur angemessen bewertete, separat ausgewiesene Gegenstände, z. B. eine gebrauchte Küche. Abzug ausschließlich bei der Grunderwerbsteuer. Notar/Grundbuch (Standard 2 %) und Makler werden hier weiter auf den Gesamtpreis berechnet; tatsächliche Vereinbarungen und Gebühren können abweichen.</small></div><p className="field-note">Makler: Trage deinen vereinbarten Käuferanteil ein. §§ 656b–656d BGB enthalten besondere Regeln für Verbraucherkäufe von Wohnungen und Einfamilienhäusern; bei anderen Objektarten kann die Verteilung abweichen.</p>
                 <h3 className="cluster-title">4. Laufende, nicht umlagefähige Kosten</h3>
                 <div className="calculation-row">
                   <div className="input-group input-optional">
@@ -2066,6 +2076,7 @@ export default function Home() {
                     </div>
                   </div>
 
+<div className="input-group input-optional"><label htmlFor="rev-movable">Mitverkaufte bewegliche Gegenstände (€)</label><input id="rev-movable" type="text" inputMode="decimal" value={rev.movableItemsAmount} onChange={e=>updateRev('movableItemsAmount',e.target.value)}/><small>Nur angemessen bewertete, separat ausgewiesene Gegenstände, z. B. eine gebrauchte Küche. Abzug ausschließlich bei der Grunderwerbsteuer. Notar/Grundbuch (Standard 2 %) und Makler werden hier weiter auf den Gesamtpreis berechnet; tatsächliche Vereinbarungen und Gebühren können abweichen.</small></div><p className="field-note">Makler: Trage deinen vereinbarten Käuferanteil ein. §§ 656b–656d BGB enthalten besondere Regeln für Verbraucherkäufe von Wohnungen und Einfamilienhäusern; bei anderen Objektarten kann die Verteilung abweichen.</p>
                   <div className="calculation-row">
                     <div className="input-group input-optional">
                       <label htmlFor="reverse-maintenance">Instandhaltung / m² / Monat</label>

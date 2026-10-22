@@ -39,6 +39,7 @@ export interface AcquisitionCostParameters {
   brokerPercent: number;
   /** Defaults to true, so an explicitly supplied broker percentage is used. */
   hasBroker?: boolean;
+  movableItemsAmount?: number;
 }
 
 export const DEFAULT_VACANCY_PERCENT = 2;
@@ -90,6 +91,7 @@ export interface NormalizedAcquisitionCostParameters {
   notaryPercent: number;
   brokerPercent: number;
   hasBroker: boolean;
+  movableItemsAmount: number;
 }
 
 export interface NormalizedOperatingCostParameters {
@@ -319,6 +321,7 @@ function normalizeAcquisitionParameters(
       ? normalizeFiniteNonNegative(input.brokerPercent)
       : 0,
     hasBroker,
+    movableItemsAmount: normalizeFiniteNonNegative(input.movableItemsAmount ?? 0),
   };
 }
 
@@ -350,7 +353,7 @@ export function calculateAcquisitionCosts(
       parameters.brokerPercent,
   );
   const landTransferTaxAmount = nonNegativeResult(
-    purchasePrice * (landTransferTaxPercent / 100),
+    Math.max(0, purchasePrice - parameters.movableItemsAmount) * (landTransferTaxPercent / 100),
   );
   const notaryAmount = nonNegativeResult(
     purchasePrice * (parameters.notaryPercent / 100),
@@ -366,7 +369,7 @@ export function calculateAcquisitionCosts(
     landTransferTaxPercent,
     notaryPercent: parameters.notaryPercent,
     brokerPercent: parameters.brokerPercent,
-    totalPercent,
+    totalPercent: parameters.movableItemsAmount > 0 && purchasePrice > 0 ? totalAmount / purchasePrice * 100 : totalPercent,
     landTransferTaxAmount,
     notaryAmount,
     brokerAmount,

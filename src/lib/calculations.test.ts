@@ -469,3 +469,14 @@ test('A7: target cashflow and yield round-trip through the standard calculator',
  }
  assert.equal(calculateReverse({...input,targetCashFlowAnnual:50000}).base.priceLimitStatus,'unaffordable');
 });
+
+test('A8: movable items reduce transfer tax only, bounded by purchase price', () => {
+ const a=calculateStandard({...commonInput,purchasePrice:350000,annualRent:21900,movableItemsAmount:5000});
+ closeTo(a.acquisitionCosts.landTransferTaxAmount,345000*.065);
+ closeTo(a.acquisitionCosts.notaryAmount,7000);closeTo(a.acquisitionCosts.brokerAmount,12495);
+ const b=calculateStandard({...commonInput,purchasePrice:10000,annualRent:1200,movableItemsAmount:15000});
+ assert.equal(b.acquisitionCosts.landTransferTaxAmount,0);
+ const r=calculateReverse({...commonInput,targetAnnualRent:21900,movableItemsAmount:5000,targetNetYieldPercent:5});
+ const s=calculateStandard({...commonInput,annualRent:21900,purchasePrice:r.base.maxPurchasePrice,movableItemsAmount:5000});
+ closeTo(s.base.netRentalYieldPercent,5,1e-6);
+});

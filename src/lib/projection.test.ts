@@ -20,7 +20,7 @@ test('A6: rent, costs and cumulative cashflow use separate annual growth', () =>
 test('A6: no debt, early payoff and zero interest remain consistent', () => {
  assert.equal(calculateProjection({...input,equityPercentOfPrice:100},30).rows[29].payment,0);
  const p=calculateProjection({...input,interestPercent:0,repaymentPercent:100},2);
- assert.equal(p.rows[0].repayment,100000); assert.equal(p.rows[1].remainingDebt,0);
+ assert.ok(Math.abs(p.rows[0].repayment-100000)<1e-8); assert.equal(p.rows[1].remainingDebt,0);
  assert.equal(p.rows[1].payment,0);
  assert.equal(calculateProjection(input,100).rows.length,30);
 });

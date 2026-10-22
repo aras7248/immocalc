@@ -24,7 +24,8 @@ export function calculateProjection(input: ProjectionInput, years = 10) {
     let interest = 0; let repayment = 0; let payments = 0;
     for (let month = 0; month < 12 && balance > 0; month++) {
       const monthlyInterest = balance * rate;
-      const actualPayment = Math.min(payment, balance + monthlyInterest);
+      const amountDue = balance + monthlyInterest;
+      const actualPayment = amountDue - payment < 1e-8 ? amountDue : payment;
       const principalPaid = Math.max(0, actualPayment - monthlyInterest);
       balance = Math.max(0, balance - principalPaid);
       interest += monthlyInterest; repayment += principalPaid; payments += actualPayment;

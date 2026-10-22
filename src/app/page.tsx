@@ -79,11 +79,12 @@ export default function Home() {
   const [premiumNotice, setPremiumNotice] = useState<string | null>(null);
   const quickRentPotential = parseNumber(calc.wohnflaeche) * parseNumber(rev.zielMietpreisQm);
 
-  const activePropertyIsSaved = savedObjects.some((object) => (
-    object.calc.objektname.trim() === calc.objektname.trim()
-    && parseNumber(object.calc.wohnflaeche) === parseNumber(calc.wohnflaeche)
-    && parseNumber(object.calc.kaufpreis) === parseNumber(calc.kaufpreis)
-  ));
+  const activePropertyIsSaved = savedObjects.some(object =>
+    JSON.stringify(object.calc)===JSON.stringify(calc) && JSON.stringify(object.rev)===JSON.stringify(rev)
+    && JSON.stringify(object.mieten)===JSON.stringify(mieten)
+    && object.rentIncrease===normalizeScenarioPercent(parseNumber(rentIncreaseInput))
+    && object.scenarioCostIncreasePercent===normalizeScenarioPercent(parseNumber(scenarioCostInput))
+  );
 
 
   useEffect(() => {

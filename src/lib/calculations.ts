@@ -73,6 +73,8 @@ export interface ReverseCalculationInput
   extends AcquisitionCostParameters,
     OperatingCostParameters {
   targetAnnualRent: number;
+  targetCashFlowAnnual?: number;
+  targetNetYieldPercent?: number;
   offeredPurchasePrice?: number;
   interestPercent: number;
   repaymentPercent: number;
@@ -115,6 +117,8 @@ export interface NormalizedReverseCalculationInput
   extends NormalizedAcquisitionCostParameters,
     NormalizedOperatingCostParameters {
   targetAnnualRent: number;
+  targetCashFlowAnnual: number;
+  targetNetYieldPercent: number;
   offeredPurchasePrice: number;
   interestPercent: number;
   repaymentPercent: number;
@@ -629,14 +633,27 @@ function calculateReverseCase(
 ): ReverseCaseResult {
   const effectiveAnnualRent = annualRent * (1 - normalizedInput.vacancyPercent / 100);
   const noiAnnual = finiteResult(effectiveAnnualRent - operatingCosts.totalAnnual);
-  const availableAnnuityAnnual = nonNegativeResult(noiAnnual);
+  const target = normalizedInput.targetCashFlowAnnual;
+  const yieldTarget = normalizedInput.targetNetYieldPercent;
+  const availableAnnuityAnnual = nonNegativeResult(noiAnnual - target);
   const debtFraction = 1 - normalizedInput.equityPercentOfPrice / 100;
   const annualDebtRateOfPrice = annuityPercent / 100 * debtFraction;
-  const priceLimitStatus: ReverseCaseResult["priceLimitStatus"] = noiAnnual < 0
-    ? "unaffordable" : annualDebtRateOfPrice === 0 ? "unbounded" : "bounded";
+  const priceLimitStatus: ReverseCaseResult["priceLimitStatus"] = (yieldTarget > 0 ? noiAnnual <= 0 : noiAnnual < target)
+    ? "unaffordable" : yieldTarget > 0 ? "bounded" : annualDebtRateOfPrice === 0 ? "unbounded" : "bounded";
   // Without debt service the cashflow model cannot derive a finite price ceiling.
-  const maxPurchasePrice = annualDebtRateOfPrice > 0
+  let maxPurchasePrice = annualDebtRateOfPrice > 0
     ? nonNegativeResult(availableAnnuityAnnual / annualDebtRateOfPrice) : 0;
+  if (yieldTarget > 0 && noiAnnual > 0) {
+    // Bisection also supports acquisition-cost allowances independent of price.
+    const investmentLimit = noiAnnual / (yieldTarget / 100);
+    let low = 0; let high = investmentLimit;
+    for (let i = 0; i < 100 && high - low > 1e-7; i++) {
+      const mid = (low + high) / 2;
+      if (mid + calculateAcquisitionCosts(mid, normalizedInput).totalAmount <= investmentLimit) low = mid;
+      else high = mid;
+    }
+    maxPurchasePrice = low;
+  } else if (priceLimitStatus === "unaffordable") maxPurchasePrice = 0;
   const acquisitionCosts = calculateAcquisitionCosts(
     maxPurchasePrice,
     normalizedInput,
@@ -682,6 +699,8 @@ export function calculateReverse(
     ...acquisitionParameters,
     ...operatingParameters,
     targetAnnualRent: normalizeFiniteNonNegative(input.targetAnnualRent),
+    targetCashFlowAnnual: normalizeFiniteNonNegative(input.targetCashFlowAnnual ?? 0),
+    targetNetYieldPercent: normalizeFiniteNonNegative(input.targetNetYieldPercent ?? 0),
     offeredPurchasePrice: normalizeFiniteNonNegative(
       input.offeredPurchasePrice ?? 0,
     ),

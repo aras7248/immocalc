@@ -454,3 +454,18 @@ test("A5: financing parameters are normalized defensively", () => {
     assert.equal(result.input.fixedInterestYears, expected);
   }
 });
+
+test('A7: target cashflow and yield round-trip through the standard calculator', () => {
+ const input={...commonInput,targetAnnualRent:21900,vacancyPercent:2,equityPercentOfPrice:20};
+ for(const targetCashFlowAnnual of [0,1200,6000]){
+  const r=calculateReverse({...input,targetCashFlowAnnual});
+  const s=calculateStandard({...input,purchasePrice:r.base.maxPurchasePrice,annualRent:21900});
+  closeTo(s.base.cashFlowAnnual,targetCashFlowAnnual);
+ }
+ for(const targetNetYieldPercent of [3,5,8]){
+  const r=calculateReverse({...input,targetNetYieldPercent});
+  const s=calculateStandard({...input,purchasePrice:r.base.maxPurchasePrice,annualRent:21900});
+  closeTo(s.base.netRentalYieldPercent,targetNetYieldPercent,1e-6);
+ }
+ assert.equal(calculateReverse({...input,targetCashFlowAnnual:50000}).base.priceLimitStatus,'unaffordable');
+});

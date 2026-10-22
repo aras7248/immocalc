@@ -100,6 +100,9 @@ interface CalcState {
 // Interface for reverse calculation
 interface ReverseState {
   wohnflaeche: string;
+  targetMode: string;
+  targetCashFlowAnnual: string;
+  targetNetYieldPercent: string;
   angebotspreis: string;
   bundesland: string;
   notarProzent: string;
@@ -215,6 +218,9 @@ const initialCalcState: CalcState = {
 };
 
 const initialRevState: ReverseState = {
+  targetMode: "cashflow",
+  targetCashFlowAnnual: "0,00",
+  targetNetYieldPercent: "",
   wohnflaeche: "268,00",
   angebotspreis: "350.000,00",
   bundesland: "NRW",
@@ -256,6 +262,9 @@ const emptyCalcState: CalcState = {
 };
 
 const emptyRevState: ReverseState = {
+  targetMode: "cashflow",
+  targetCashFlowAnnual: "0,00",
+  targetNetYieldPercent: "",
   wohnflaeche: "",
   angebotspreis: "",
   bundesland: "NRW",
@@ -771,6 +780,8 @@ export default function Home() {
     brokerPercent: parseNumber(rev.maklerProzent),
     hasBroker: rev.hasMakler,
     targetAnnualRent: parseNumber(rev.zielMietePA),
+    targetCashFlowAnnual: rev.targetMode === "yield" ? 0 : parseNumber(rev.targetCashFlowAnnual),
+    targetNetYieldPercent: rev.targetMode === "yield" ? parseNumber(rev.targetNetYieldPercent) : undefined,
     vacancyPercent: parseNumber(rev.vacancyPercent),
     offeredPurchasePrice: parseNumber(calc.kaufpreis),
     livingArea: parseNumber(calc.wohnflaeche),
@@ -2110,6 +2121,10 @@ export default function Home() {
                     <small id="reverse-fixed-interest-help">1 bis 30 volle Jahre. Die Zinsbindung wird gespeichert; die angezeigten Kennzahlen beziehen sich auf das erste Jahr.</small>
                   </div>
                 </div>
+                  <div className="calculation-row" aria-label="Ziel der Rückwärtsrechnung">
+                    <label>Zielart<select value={rev.targetMode} onChange={e=>updateRev('targetMode',e.target.value)}><option value="cashflow">Cashflow vor Steuern</option><option value="yield">Nettorendite vor Steuern</option></select></label>
+                    {rev.targetMode === 'yield' ? <label>Ziel-Nettorendite (%)<input type="text" inputMode="decimal" value={rev.targetNetYieldPercent} onChange={e=>updateRev('targetNetYieldPercent',e.target.value)}/></label> : <label>Ziel-Cashflow pro Jahr (€)<input type="text" inputMode="decimal" value={rev.targetCashFlowAnnual} onChange={e=>updateRev('targetCashFlowAnnual',e.target.value)}/></label>}
+                  </div>
                   <div className="calculation-row">
                     <div className="input-group input-optional">
                       <label htmlFor="reverse-interest">Zins</label>
@@ -2133,16 +2148,17 @@ export default function Home() {
 
             <section className="results-sticky">
               <CollapsibleSection
-                title="Ergebnis (Break-Even)"
+                title="Kaufpreis bei Zielvorgabe"
                 icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>}
                 badge={describePriceLimit(reverseResult.base)}
               >
                 <section style={{ padding: '1rem', background: 'var(--output-calc-bg)', borderRadius: '0 0 12px 12px' }}>
-                  <h3 style={{ marginBottom: '1rem', color: 'var(--success-color)' }}>Ergebnis (Break-Even)</h3>
+                  <h3 style={{ marginBottom: '1rem', color: 'var(--success-color)' }}>Kaufpreis bei Zielvorgabe</h3>
 
+                  {rev.targetMode !== 'yield' && parseNumber(rev.targetCashFlowAnnual) === 0 && <p>Break-even: Ziel-Cashflow 0 € vor Steuern.</p>}
                   <div className="results-hero-vertical" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div className="result-card" style={{ padding: '1rem', border: '2px solid var(--success-color)' }}>
-                      <span className="label">Max. Kaufpreis (vor NK)</span>
+                      <span className="label">{rev.targetMode === 'yield' ? 'Kaufpreis bei Ziel-Nettorendite' : 'Kaufpreis bei Ziel-Cashflow'}</span>
                       <span className="value positive" style={{ fontSize: '1.8rem' }}>
                         {describePriceLimit(reverseResult.base)}
                       </span>

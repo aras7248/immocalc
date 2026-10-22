@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Metadata, Viewport } from "next";
 import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
-import { ModelNotice } from "@/components/immocalc/ModelNotice";
+import { ModelNotice, TaxSourceNotice } from "@/components/immocalc/ModelNotice";
 import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 
@@ -59,7 +59,7 @@ export default function RootLayout({
         <ThemeProvider>
           <AuthProvider>
             {children}
-            <footer className="site-footer"><ModelNotice /><nav aria-label="Rechtliche Informationen"><Link href="/impressum">Impressum</Link><Link href="/datenschutz">Datenschutz</Link><Link href="/agb">AGB</Link><Link href="/widerruf">Widerruf</Link></nav></footer>
+            <footer className="site-footer"><ModelNotice /><TaxSourceNotice /><nav aria-label="Rechtliche Informationen"><Link href="/impressum">Impressum</Link><Link href="/datenschutz">Datenschutz</Link><Link href="/agb">AGB</Link><Link href="/widerruf">Widerruf</Link></nav></footer>
           </AuthProvider>
         </ThemeProvider>
       </body>

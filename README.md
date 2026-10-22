@@ -56,3 +56,5 @@ Alle Ergebnisse sind Modellrechnungen, keine Anlage-, Steuer- oder Rechtsberatun
 ## Review und Veröffentlichung
 
 Die Änderungen werden im Entwurfs-PR gesammelt. Ein erfolgreicher Build oder eine Vorschau bedeutet keine Freigabe zur Übernahme in die Produktionsversion. Der aktuelle Umfang und tatsächlich verbleibende Arbeiten werden in [Review-Status](docs/review-status.md) geführt.
+
+Steuerdaten zuletzt geprüft: 22.10.2026. Die Länderübersicht Brandenburg enthält für Bremen noch einen älteren Satz; das aktuelle Bremer Landesgesetz (5,5 %) hat Vorrang. Bei Änderungen: Landesgesetz und Wirksamkeitsdatum prüfen, `LAND_TRANSFER_TAX_RATES_2026` sowie `LAND_TRANSFER_TAX_REVIEW` aktualisieren, alle 16 Länderwerte testen und den sichtbaren Quellenstand prüfen. Vor jedem Jahreswechsel ist eine erneute Prüfung erforderlich.

@@ -9,6 +9,14 @@ import { normalizeScenarioPercent } from "./scenario.ts";
  * - all monetary values are expressed in euros.
  */
 
+// Review annually and whenever a state announces a change; update all 16 rate tests.
+export const LAND_TRANSFER_TAX_REVIEW = {
+  checkedOn: '2026-10-22',
+  source: 'Landesgesetze',
+  overviewUrl: 'https://finanzamt.brandenburg.de/fa/de/steuern/steuerinformationen/grunderwerbsteuer/',
+  // The overview still lists Bremen at 5%; its newer statute takes precedence.
+  bremenUrl: 'https://www.transparenz.bremen.de/metainformationen/gesetz-ueber-die-festsetzung-des-steuersatzes-fuer-die-grunderwerbsteuer-vom-16-november-2010-261196?template=20_gp_ifg_meta_detail_d',
+} as const;
 export const LAND_TRANSFER_TAX_RATES_2026 = {
   BW: 5,
   BY: 3.5,

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  LAND_TRANSFER_TAX_REVIEW,
   GRUNDERWERBSTEUER_SAETZE_2026,
   calculateOperatingCosts,
   calculateReverse,
@@ -480,4 +481,13 @@ test('B1: unknown and inherited property names warn instead of appearing valid',
  assert.deepEqual(r.acquisitionCosts.warnings,['unknown_federal_state']);
  assert.equal(r.acquisitionCosts.landTransferTaxAmount,0);
  }
+});
+
+test('tax rate source metadata has an explicit review date and official sources', () => {
+ assert.equal(Object.keys(GRUNDERWERBSTEUER_SAETZE_2026).length,16);
+ assert.match(LAND_TRANSFER_TAX_REVIEW.checkedOn,/^\d{4}-\d{2}-\d{2}$/);
+ assert.ok(Number.isFinite(Date.parse(LAND_TRANSFER_TAX_REVIEW.checkedOn)));
+ assert.equal(LAND_TRANSFER_TAX_REVIEW.source,'Landesgesetze');
+ assert.equal(new URL(LAND_TRANSFER_TAX_REVIEW.overviewUrl).hostname,'finanzamt.brandenburg.de');
+ assert.equal(new URL(LAND_TRANSFER_TAX_REVIEW.bremenUrl).hostname,'www.transparenz.bremen.de');
 });

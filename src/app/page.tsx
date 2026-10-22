@@ -895,7 +895,8 @@ export default function Home() {
             if(error)throw error;const loaded=parseSavedObjectRow(data);if(loaded){handleLoadObject(loaded);setSavedObjects(prev=>prev.map(o=>o.id===loaded.id?loaded:o));}
           } else if(choice==='copy'){
             const copyName=nameToSave+' (Kopie)';
-            await saveObjectVersioned(supabase,{user_id:user.id,calc_data:{schemaVersion:SAVED_OBJECT_SCHEMA_VERSION,calc:{...calc,objektname:copyName},rev,mieten,rentIncrease,scenarioCostIncreasePercent}});
+            const saved=await saveObjectVersioned(supabase,{user_id:user.id,calc_data:{schemaVersion:SAVED_OBJECT_SCHEMA_VERSION,calc:{...calc,objektname:copyName},rev,mieten,rentIncrease,scenarioCostIncreasePercent}});
+            setSavedObjects(prev=>[{id:saved.id,db_id:saved.id,updatedAt:saved.updated_at,date:new Date().toISOString().split('T')[0],calc:{...calc,objektname:copyName},rev,mieten,rentIncrease,scenarioCostIncreasePercent},...prev]);
             updateCalc('objektname',copyName);void notify('Die aktuellen Eingaben wurden als separates Objekt gespeichert.');
           }
         }catch{void notify('Die Konfliktlösung ist fehlgeschlagen. Deine aktuellen Eingaben bleiben erhalten.');}

@@ -1,3 +1,4 @@
+import { readProjectionSettings, type ProjectionSettings } from '../../lib/projection.ts';
 import { DEFAULT_VACANCY_PERCENT } from '../../lib/calculations.ts';
 import { normalizeScenarioPercent } from '../../lib/scenario.ts';
 import { isRecord, mergeState, readSavedScenarioCostIncrease } from '../../lib/savedState.ts';
@@ -6,6 +7,7 @@ export interface SavedObject {
   id: string;
   db_id?: string;
   updatedAt: string | null;
+  premiumSettings: ProjectionSettings;
   date: string;
   calc: CalcState;
   rev: ReverseState;
@@ -173,6 +175,7 @@ export function parseSavedObjectRow(row: unknown): SavedObject | null {
   return {
     id: row.id,
     db_id: row.id,
+    premiumSettings: readProjectionSettings(payload.premiumSettings),
     updatedAt: typeof row.updated_at === "string" ? row.updated_at : null,
     date: Number.isNaN(createdAt.getTime())
       ? new Date().toISOString().split("T")[0]

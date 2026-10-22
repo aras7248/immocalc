@@ -1,9 +1,9 @@
 'use client';
-import { useState } from 'react';
-import { calculateProjection, type ProjectionInput } from '@/lib/projection';
+import { calculateProjection, type ProjectionInput, type ProjectionSettings } from '@/lib/projection';
 const money = (n: number) => n.toLocaleString('de-DE', {style:'currency',currency:'EUR'});
-export function ProjectionPanel({ input }: { input: ProjectionInput }) {
- const [years,setYears]=useState(10); const [rentGrowth,setRentGrowth]=useState(0); const [costGrowth,setCostGrowth]=useState(2);
+export function ProjectionPanel({ input,settings,onChange }: { input: ProjectionInput;settings:ProjectionSettings;onChange:(settings:ProjectionSettings)=>void }) {
+ const {years,annualRentGrowthPercent:rentGrowth,annualCostGrowthPercent:costGrowth}=settings;
+ const setYears=(years:number)=>onChange({...settings,years});const setRentGrowth=(annualRentGrowthPercent:number)=>onChange({...settings,annualRentGrowthPercent});const setCostGrowth=(annualCostGrowthPercent:number)=>onChange({...settings,annualCostGrowthPercent});
  const result=calculateProjection({...input,annualRentGrowthPercent:rentGrowth,annualCostGrowthPercent:costGrowth},years);
  return <section className="glass-panel" aria-label="Mehrjahresprojektion">
   <h2>Tilgungsplan und Mehrjahresprojektion</h2>

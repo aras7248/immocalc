@@ -25,7 +25,7 @@ test("enforces the investor limit without restricting professional access", () =
 test("creates versioned premium analysis envelopes", () => {
   assert.deepEqual(createPremiumAnalysisEnvelope({ purchasePrice: 350_000 }), {
     schemaVersion: 1,
-    calculationVersion: "2026.1",
+    calculationVersion: "2026.2",
     input: { purchasePrice: 350_000 },
     result: null,
   });

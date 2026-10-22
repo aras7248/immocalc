@@ -1,6 +1,8 @@
 "use client";
 
 import Image from "next/image";
+import { calculateProjection, DEFAULT_PROJECTION_SETTINGS, readProjectionSettings } from "@/lib/projection";
+import { createPremiumAnalysisEnvelope } from "@/domain/immocalc/premium";
 import { useEntitlement } from "@/hooks/useEntitlement";
 import { canCreatePremiumProject, hasPremiumAccess } from "@/domain/immocalc/premium";
 import { EquityFields, DebtRateFields } from "@/components/immocalc/FinancingFields";
@@ -42,7 +44,7 @@ function describePriceLimit(result: ReverseCaseResult): string {
 export default function Home() {
   const { request: dialogRequest, close: closeDialog, ask, notify, confirmAction, promptValue } = useAppDialog();
   // === STANDARD KALKULATION STATE ===
-  const {calc,setCalc,rev,setRev,mieten,setMieten,rentIncreaseInput,setRentIncreaseInput,scenarioCostInput,setScenarioCostInput} = useCalculatorState();
+  const {premiumSettings,setPremiumSettings,calc,setCalc,rev,setRev,mieten,setMieten,rentIncreaseInput,setRentIncreaseInput,scenarioCostInput,setScenarioCostInput} = useCalculatorState();
 
   const calcIssues = validateFields({...calc, maklerProzent:calc.hasMakler?calc.maklerProzent:'0'}, parseNumber);
   const revIssues = validateFields({...rev, maklerProzent:rev.hasMakler?rev.maklerProzent:'0'}, parseNumber);
@@ -87,6 +89,7 @@ export default function Home() {
     && JSON.stringify(object.mieten)===JSON.stringify(mieten)
     && object.rentIncrease===normalizeScenarioPercent(parseNumber(rentIncreaseInput))
     && object.scenarioCostIncreasePercent===normalizeScenarioPercent(parseNumber(scenarioCostInput))
+    && JSON.stringify(object.premiumSettings)===JSON.stringify(premiumSettings)
   );
 
 
@@ -436,8 +439,8 @@ export default function Home() {
     brokerPercent: parseNumber(rev.maklerProzent),
     hasBroker: rev.hasMakler,
     targetAnnualRent: parseNumber(rev.zielMietePA),
-    targetCashFlowAnnual: rev.targetMode === "yield" ? 0 : parseNumber(rev.targetCashFlowAnnual),
-    targetNetYieldPercent: rev.targetMode === "yield" ? parseNumber(rev.targetNetYieldPercent) : undefined,
+    targetCashFlowAnnual: 0,
+    targetNetYieldPercent: undefined,
     vacancyPercent: parseNumber(rev.vacancyPercent),
     offeredPurchasePrice: parseNumber(calc.kaufpreis),
     livingArea: parseNumber(calc.wohnflaeche),
@@ -451,6 +454,8 @@ export default function Home() {
     scenarioRentIncreasePercent: rentIncrease,
     scenarioCostIncreasePercent,
   });
+  const premiumReverseResult=calculateReverse({...reverseResult.input,fixedInterestYears:reverseResult.input.fixedInterestYears??undefined,targetCashFlowAnnual:rev.targetMode==='yield'?0:parseNumber(rev.targetCashFlowAnnual),targetNetYieldPercent:rev.targetMode==='yield'?parseNumber(rev.targetNetYieldPercent):undefined});
+  const buildPremiumAnalysis=()=>hasPremiumAccess(entitlement.level)?{...createPremiumAnalysisEnvelope({projection:standardResult.input,settings:premiumSettings,target:premiumReverseResult.input}),result:{projection:calculateProjection({...standardResult.input,...premiumSettings},premiumSettings.years),target:premiumReverseResult}}:undefined;
   const revGesamtNkProzent = reverseResult.base.acquisitionCosts.totalPercent;
   const revPriceHasLimit = reverseResult.base.priceLimitStatus === "bounded";
   const revMaxGesamtKaufpreis = reverseResult.base.totalInvestment;
@@ -561,6 +566,8 @@ export default function Home() {
           mieten,
           rentIncrease,
           scenarioCostIncreasePercent,
+          premiumSettings,
+          premiumAnalysis:buildPremiumAnalysis(),
         }
       };
 
@@ -593,8 +600,8 @@ export default function Home() {
             if(error)throw error;const loaded=parseSavedObjectRow(data);if(loaded){handleLoadObject(loaded);setSavedObjects(prev=>prev.map(o=>o.id===loaded.id?loaded:o));}
           } else if(choice==='copy'){
             const copyName=nameToSave+' (Kopie)';
-            const saved=await saveObjectVersioned(supabase,{user_id:user.id,calc_data:{schemaVersion:SAVED_OBJECT_SCHEMA_VERSION,calc:{...calc,objektname:copyName},rev,mieten,rentIncrease,scenarioCostIncreasePercent}});
-            setSavedObjects(prev=>[{id:saved.id,db_id:saved.id,updatedAt:saved.updated_at,date:new Date().toISOString().split('T')[0],calc:{...calc,objektname:copyName},rev,mieten,rentIncrease,scenarioCostIncreasePercent},...prev]);
+            const saved=await saveObjectVersioned(supabase,{user_id:user.id,calc_data:{schemaVersion:SAVED_OBJECT_SCHEMA_VERSION,calc:{...calc,objektname:copyName},rev,mieten,rentIncrease,scenarioCostIncreasePercent,premiumSettings,premiumAnalysis:buildPremiumAnalysis()}});
+            setSavedObjects(prev=>[{id:saved.id,db_id:saved.id,updatedAt:saved.updated_at,date:new Date().toISOString().split('T')[0],calc:{...calc,objektname:copyName},rev,mieten,rentIncrease,scenarioCostIncreasePercent,premiumSettings},...prev]);
             updateCalc('objektname',copyName);void notify('Die aktuellen Eingaben wurden als separates Objekt gespeichert.');
           }
         }catch{void notify('Die Konfliktlösung ist fehlgeschlagen. Deine aktuellen Eingaben bleiben erhalten.');}
@@ -609,6 +616,7 @@ export default function Home() {
 
   const handleLoadObject = (obj: SavedObject) => {
     hasManualFederalStateChangeRef.current = true;
+    setPremiumSettings(readProjectionSettings(obj.premiumSettings));
     setCalc(obj.calc);
     setRev({
       ...(obj.rev || rev),
@@ -622,6 +630,7 @@ export default function Home() {
 
   const handleClearData = async () => {
     if (await confirmAction("Möchtest du wirklich alle eingegebenen Werte löschen?")) {
+      setPremiumSettings(DEFAULT_PROJECTION_SETTINGS);
       setCalc(emptyCalcState);
       setRev(emptyRevState);
       setSyncedFields({});
@@ -890,8 +899,18 @@ export default function Home() {
       {(standardResult.acquisitionCosts.warnings.length > 0 || reverseResult.base.acquisitionCosts.warnings.length > 0) && <p role="alert" className="validation-message">Unbekanntes Bundesland: Bitte wähle den Objektstandort aus. Die Grunderwerbsteuer ist noch nicht zuverlässig berücksichtigt.</p>}
       {!hasPremiumAccess(entitlement.level) && <p role="status">{entitlement.loading?'Tarifberechtigung wird geprüft …':entitlement.error?'Tarifberechtigung konnte nicht geprüft werden. Bitte prüfe die Einrichtung der ImmoCalc-Migration.':'Neue Objekte und Premium-Analysen benötigen eine freigeschaltete ImmoCalc-Berechtigung. Eine Buchung ist noch nicht verfügbar.'}</p>}
       {activeTab === 'premium' && (
-        <>
-        <PremiumAccessPanel
+        hasPremiumAccess(entitlement.level) ? <section id="premium-panel" role="tabpanel" aria-labelledby="premium-tab">
+          <ProjectionPanel input={standardResult.input} settings={premiumSettings} onChange={value=>setPremiumSettings(readProjectionSettings(value))}/>
+          <section className="glass-panel"><h2>Ziel-Rückwärtsrechnung vor Steuern</h2>
+                  <div className="calculation-row" aria-label="Ziel der Rückwärtsrechnung">
+                    <label>Zielart<select value={rev.targetMode} onChange={e=>updateRev('targetMode',e.target.value)}><option value="cashflow">Cashflow vor Steuern</option><option value="yield">Nettorendite vor Steuern</option></select></label>
+                    {rev.targetMode === 'yield' ? <label>Ziel-Nettorendite (%)<input type="text" inputMode="decimal" value={rev.targetNetYieldPercent} onChange={e=>updateRev('targetNetYieldPercent',e.target.value)} aria-invalid={Boolean(revIssues.targetNetYieldPercent)} />
+{revIssues.targetNetYieldPercent && <small role="alert" className="validation-message">{revIssues.targetNetYieldPercent}</small>}</label> : <label>Ziel-Cashflow pro Jahr (€)<input type="text" inputMode="decimal" value={rev.targetCashFlowAnnual} onChange={e=>updateRev('targetCashFlowAnnual',e.target.value)} aria-invalid={Boolean(revIssues.targetCashFlowAnnual)} />
+{revIssues.targetCashFlowAnnual && <small role="alert" className="validation-message">{revIssues.targetCashFlowAnnual}</small>}</label>}
+                  </div>
+          {rev.targetMode==='yield'&&parseNumber(rev.targetNetYieldPercent)<=0 ? <p role="alert">Bitte eine Zielrendite größer als 0 % eingeben.</p> : <p>{rev.targetMode==='yield'?'Kaufpreis bei Ziel-Nettorendite':'Kaufpreis bei Ziel-Cashflow'}: <strong>{describePriceLimit(premiumReverseResult.base)}</strong></p>}
+          <p>Speichern übernimmt die Einstellungen und eine versionierte Modellrechnung in dein Objekt.</p></section>
+        </section> : <PremiumAccessPanel
           selectedPlan={selectedPremiumPlan}
           notice={premiumNotice}
           onPlanChange={(plan) => {
@@ -900,8 +919,6 @@ export default function Home() {
           }}
           onUnlock={handlePremiumUnlock}
         />
-        {!criticalInputError && <ProjectionPanel input={standardResult.input} />}
-        </>
       )}
 
       {activeTab === 'standard' && (
@@ -1766,12 +1783,7 @@ export default function Home() {
                   </div>
 
                 <EquityFields state={rev} prefix="reverse" issues={revIssues} onChange={updateRev} onEnter={handleEnterKey}/>
-                  <div className="calculation-row" aria-label="Ziel der Rückwärtsrechnung">
-                    <label>Zielart<select value={rev.targetMode} onChange={e=>updateRev('targetMode',e.target.value)}><option value="cashflow">Cashflow vor Steuern</option><option value="yield">Nettorendite vor Steuern</option></select></label>
-                    {rev.targetMode === 'yield' ? <label>Ziel-Nettorendite (%)<input type="text" inputMode="decimal" value={rev.targetNetYieldPercent} onChange={e=>updateRev('targetNetYieldPercent',e.target.value)} aria-invalid={Boolean(revIssues.targetNetYieldPercent)} />
-{revIssues.targetNetYieldPercent && <small role="alert" className="validation-message">{revIssues.targetNetYieldPercent}</small>}</label> : <label>Ziel-Cashflow pro Jahr (€)<input type="text" inputMode="decimal" value={rev.targetCashFlowAnnual} onChange={e=>updateRev('targetCashFlowAnnual',e.target.value)} aria-invalid={Boolean(revIssues.targetCashFlowAnnual)} />
-{revIssues.targetCashFlowAnnual && <small role="alert" className="validation-message">{revIssues.targetCashFlowAnnual}</small>}</label>}
-                  </div>
+
                   <DebtRateFields state={rev} prefix="reverse" issues={revIssues} onChange={updateRev} onBlur={handleBlurRev} onEnter={handleEnterKey}/>
                 </div>
               </section>
@@ -1786,10 +1798,10 @@ export default function Home() {
                 <section style={{ padding: '1rem', background: 'var(--output-calc-bg)', borderRadius: '0 0 12px 12px' }}>
                   <h3 style={{ marginBottom: '1rem', color: 'var(--success-color)' }}>Kaufpreis bei Zielvorgabe</h3>
 
-                  {rev.targetMode !== 'yield' && parseNumber(rev.targetCashFlowAnnual) === 0 && <p>Break-even: Ziel-Cashflow 0 € vor Steuern.</p>}
+                  <p>Break-even: Ziel-Cashflow 0 € vor Steuern.</p>
                   <div className="results-hero-vertical" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div className="result-card" style={{ padding: '1rem', border: '2px solid var(--success-color)' }}>
-                      <span className="label">{rev.targetMode === 'yield' ? 'Kaufpreis bei Ziel-Nettorendite' : 'Kaufpreis bei Ziel-Cashflow'}</span>
+                      <span className="label">Kaufpreis bei Ziel-Cashflow</span>
                       <span className="value positive" style={{ fontSize: '1.8rem' }}>
                         {describePriceLimit(reverseResult.base)}
                       </span>

@@ -39,6 +39,11 @@ try{
  await page.getByRole('button',{name:'Gespeicherte Objekte schließen'}).click();
  await page.locator('#reverse-tab').click();await page.locator('#reverse-panel').waitFor();
  await page.locator('#premium-tab').click();await page.locator('#premium-panel').waitFor();
+ await page.getByLabel('Zeitraum (Jahre)').fill('15');
+ await page.getByLabel('Zielart').selectOption('cashflow');
+ await page.getByLabel('Ziel-Cashflow pro Jahr (€)',{exact:true}).fill('1200');
+ assert.ok((await page.locator('#premium-panel').innerText()).includes('Kaufpreis bei Ziel-Cashflow'));
+
  await page.locator('#standard-tab').click();
 
  await page.getByRole('button',{name:'Alle Werte löschen',exact:true}).click();

@@ -1,5 +1,5 @@
 export const PREMIUM_ANALYSIS_SCHEMA_VERSION = 1 as const;
-export const PREMIUM_CALCULATION_VERSION = "2026.1" as const;
+export const PREMIUM_CALCULATION_VERSION = "2026.2" as const;
 
 export type PremiumPlanId = "investor" | "professional";
 export type ImmocalcAccessLevel = "free" | PremiumPlanId;

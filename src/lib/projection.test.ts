@@ -24,3 +24,9 @@ test('A6: no debt, early payoff and zero interest remain consistent', () => {
  assert.equal(p.rows[1].payment,0);
  assert.equal(calculateProjection(input,100).rows.length,30);
 });
+
+test('E2: persisted projection settings are bounded and retain annual growth separately',async()=>{
+ const {readProjectionSettings}=await import('./projection.ts');
+ assert.deepEqual(readProjectionSettings(undefined),{years:10,annualRentGrowthPercent:0,annualCostGrowthPercent:2});
+ assert.deepEqual(readProjectionSettings({years:50,annualRentGrowthPercent:-10,annualCostGrowthPercent:3}),{years:30,annualRentGrowthPercent:-10,annualCostGrowthPercent:3});
+});

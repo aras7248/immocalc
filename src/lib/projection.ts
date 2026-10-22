@@ -41,3 +41,10 @@ export function calculateProjection(input: ProjectionInput, years = 10) {
     fixedInterestYears: term, remainingDebtAtFixedInterest: term && term <= horizon ? rows[term - 1].remainingDebt : null,
     extrapolatesBeyondFixedInterest: term !== null && horizon > term };
 }
+
+export interface ProjectionSettings { years:number; annualRentGrowthPercent:number; annualCostGrowthPercent:number }
+export const DEFAULT_PROJECTION_SETTINGS:ProjectionSettings={years:10,annualRentGrowthPercent:0,annualCostGrowthPercent:2};
+export function readProjectionSettings(value:unknown):ProjectionSettings{
+ const row=typeof value==='object'&&value!==null?value as Record<string,unknown>:{};
+ return {years:typeof row.years==='number'&&Number.isFinite(row.years)?Math.min(30,Math.max(1,Math.floor(row.years))):10,annualRentGrowthPercent:normalizeScenarioPercent(row.annualRentGrowthPercent??0),annualCostGrowthPercent:normalizeScenarioPercent(row.annualCostGrowthPercent??2)};
+}

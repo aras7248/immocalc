@@ -41,6 +41,10 @@ try{
  await page.locator('#premium-tab').click();await page.locator('#premium-panel').waitFor();
  await page.locator('#standard-tab').click();
 
+ await page.getByRole('button',{name:'Alle Werte löschen',exact:true}).click();
+ await page.locator('dialog.app-dialog').waitFor();
+ for(let i=0;i<4;i++){await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>Boolean(document.activeElement?.closest('dialog'))),true);}
+ await page.keyboard.press('Escape');assert.equal(await page.locator('dialog.app-dialog').count(),0);
  await page.screenshot({path:'test-results/desktop.png',fullPage:true});
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:'test-results/mobile.png',fullPage:true});
  const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1);assert.equal(overflow,false,'Mobile page must not overflow');

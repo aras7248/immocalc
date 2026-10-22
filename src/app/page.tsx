@@ -351,6 +351,7 @@ export default function Home() {
   const scanButtonRef = useRef<HTMLButtonElement>(null);
   const scanDialogRef = useRef<HTMLDivElement>(null);
   const hasManualFederalStateChangeRef = useRef(false);
+  const [locationSuggestion, setLocationSuggestion] = useState<string | null>(null);
 
   // UX-Hilfen für Einheiten-Rechner
   const mietenRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -426,8 +427,7 @@ export default function Home() {
         const federalState = data.federalState;
         if (!isActive || hasManualFederalStateChangeRef.current || !federalState) return;
 
-        setCalc(prev => ({ ...prev, bundesland: federalState }));
-        setRev(prev => ({ ...prev, bundesland: federalState }));
+        setLocationSuggestion(federalState);
       } catch {
         // Ohne Geo-Header bleibt die sichere Standardauswahl NRW bestehen.
       }
@@ -1212,6 +1212,11 @@ export default function Home() {
         }}
       />
 
+      {locationSuggestion && <div className="glass-panel" role="status">
+        <p>Dein erkannter Standort: {locationSuggestion}. Liegt auch dein Objekt dort?</p>
+        <button type="button" onClick={()=>{updateFederalState(locationSuggestion);setLocationSuggestion(null);}}>Für mein Objekt übernehmen</button>
+        <button type="button" onClick={()=>setLocationSuggestion(null)}>Verwerfen</button>
+      </div>}
       <ActivePropertyBar
         objectName={calc.objektname}
         livingArea={calc.wohnflaeche}

@@ -1995,3 +1995,6 @@ button:not(.tooltip-trigger) {
     scroll-behavior: auto;
   }
 }
+
+
+.projection-scroll{overflow-x:auto;max-width:100%}.projection-scroll table{border-collapse:collapse;width:100%;font-size:.8rem}.projection-scroll th,.projection-scroll td{padding:.5rem;border-bottom:1px solid var(--glass-border);text-align:right;white-space:nowrap}

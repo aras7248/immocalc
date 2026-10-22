@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { ProjectionPanel } from "@/components/immocalc/ProjectionPanel";
 import { useState, useEffect, useId, useRef } from "react";
 import { ActivePropertyBar } from '@/components/immocalc/ActivePropertyBar';
 import { CalculatorModeTabs, type CalculatorMode } from '@/components/immocalc/CalculatorModeTabs';
@@ -1209,6 +1210,7 @@ export default function Home() {
       />
 
       {activeTab === 'premium' && (
+        <>
         <PremiumAccessPanel
           selectedPlan={selectedPremiumPlan}
           notice={premiumNotice}
@@ -1218,6 +1220,8 @@ export default function Home() {
           }}
           onUnlock={handlePremiumUnlock}
         />
+        <ProjectionPanel input={standardResult.input} />
+        </>
       )}
 
       {activeTab === 'standard' && (

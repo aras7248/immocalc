@@ -38,7 +38,7 @@ import { SAVED_OBJECT_SCHEMA_VERSION } from '@/lib/savedState';
 
 function describePriceLimit(result: ReverseCaseResult): string {
   if (result.priceLimitStatus === "unbounded") return "Keine Kaufpreisgrenze ableitbar";
-  if (result.priceLimitStatus === "unaffordable") return "Miete deckt laufende Kosten nicht";
+  if (result.priceLimitStatus === "unaffordable") return "Ziel mit den Eingaben nicht erreichbar";
   return `${formatAcc(result.maxPurchasePrice)} €`;
 }
 
@@ -49,7 +49,6 @@ export default function Home() {
 
   const calcIssues = validateFields({...calc, maklerProzent:calc.hasMakler?calc.maklerProzent:'0'}, parseNumber);
   const revIssues = validateFields({...rev, maklerProzent:rev.hasMakler?rev.maklerProzent:'0'}, parseNumber);
-  const criticalInputError = Boolean(calcIssues.wohnflaeche || calcIssues.kaufpreis || revIssues.wohnflaeche);
   const { user, signOut } = useAuth();
   const entitlement=useEntitlement(user?.id,supabase);
   const {savedObjects,setSavedObjects,loadError} = useSavedObjects(user?.id, supabase);
@@ -81,6 +80,7 @@ export default function Home() {
 
   // Tab State
   const [activeTab, setActiveTab] = useState<CalculatorMode>('standard');
+  const criticalInputError = activeTab === 'reverse' ? Boolean(revIssues.wohnflaeche) : Boolean(calcIssues.wohnflaeche || calcIssues.kaufpreis);
   const [selectedPremiumPlan, setSelectedPremiumPlan] = useState<PremiumPlanId>('investor');
   const [premiumNotice, setPremiumNotice] = useState<string | null>(null);
   const quickRentPotential = parseNumber(calc.wohnflaeche) * parseNumber(rev.zielMietpreisQm);
@@ -670,7 +670,7 @@ export default function Home() {
     <div className="app-container">
       {loadError && <p role="alert">{loadError}</p>}
       {dialogRequest && <AppDialog request={dialogRequest} onClose={closeDialog} />}
-      {criticalInputError && <p role="alert" className="validation-message">Bitte korrigiere Kaufpreis und Wohnfläche. Die Ergebnisanzeige ist bis dahin ausgeblendet.</p>}
+      {criticalInputError && <p role="alert" className="validation-message">Bitte korrigiere die markierten Pflichtfelder. Die Ergebnisanzeige ist bis dahin ausgeblendet.</p>}
       {/* ═══ TOP BAR — eigenständige ImmoCalc-App im gemeinsamen Designsystem ═══ */}
       <header className="app-topbar">
         <div className="app-brand">

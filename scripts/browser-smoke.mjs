@@ -50,8 +50,22 @@ try{
  await page.locator('dialog.app-dialog').waitFor();
  for(let i=0;i<4;i++){await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>Boolean(document.activeElement?.closest('dialog'))),true);}
  await page.keyboard.press('Escape');assert.equal(await page.locator('dialog.app-dialog').count(),0);
- await page.screenshot({path:'test-results/desktop.png',fullPage:true});
+ // Exercise the actual self-hosted OCR worker/WASM/language model with a synthetic image.
+ const ocrRequests=[];const recordRequest=req=>ocrRequests.push(req.url());page.on('request',recordRequest);
+ const image=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=1400;c.height=500;const ctx=c.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle='black';ctx.font='48px Arial';['Kaufpreis: 350000 EUR','Wohnfläche: 120 m²','Baujahr: 1980'].forEach((text,i)=>ctx.fillText(text,50,100+i*100));return c.toDataURL('image/png').split(',')[1];});
+ await page.locator('input[type=file]').setInputFiles({name:'synthetic-expose.png',mimeType:'image/png',buffer:Buffer.from(image,'base64')});
+ await page.locator('dialog.scan-dialog').waitFor({timeout:60000});
+ assert.match(await page.locator('dialog.scan-dialog').innerText(),/350/);
+ page.off('request',recordRequest);
+ assert.ok(ocrRequests.some(url=>url.includes('/ocr/worker.min.js')));
+ assert.equal(ocrRequests.some(url=>!url.startsWith('http://127.0.0.1:4001/')&&!url.startsWith('https://example.supabase.co/')),false,'OCR must not request external runtime assets');
+ await page.keyboard.press('Escape');await page.locator('dialog.scan-dialog').waitFor({state:'detached'});
+ await page.screenshot({path:'test-results/desktop.png' ,fullPage:true});
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:'test-results/mobile.png',fullPage:true});
  const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1);assert.equal(overflow,false,'Mobile page must not overflow');
- assert.deepEqual(errors,[]);await writeFile('test-results/browser-summary.json',JSON.stringify({checks:['standard input to result','mocked save/load','all mode tabs','desktop/mobile','no page errors'],passed:true},null,2));
+ // Legal placeholders must also be reachable without a session.
+ const anonymous=await browser.newContext();const legal=await anonymous.newPage();
+ for(const route of ['impressum','datenschutz','agb','widerruf']){await legal.goto('http://127.0.0.1:4001/'+route);await legal.getByText('Dieser Inhalt wird vor Start der kostenpflichtigen Tarife ergänzt.').waitFor();assert.equal(new URL(legal.url()).pathname,'/'+route);}
+ await anonymous.close();
+ assert.deepEqual(errors,[]);await writeFile('test-results/browser-summary.json',JSON.stringify({checks:['standard input to result','mocked save/load','all mode tabs and premium targets','self-hosted OCR worker and extraction','desktop/mobile','no page errors'],passed:true},null,2));
 }catch(error){await page.screenshot({path:'test-results/failure.png',fullPage:true});throw error;}finally{await browser.close();}

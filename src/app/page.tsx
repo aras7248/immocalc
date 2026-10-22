@@ -1229,6 +1229,7 @@ export default function Home() {
         onSave={handleSaveObject}
       />
 
+      {(standardResult.acquisitionCosts.warnings.length > 0 || reverseResult.base.acquisitionCosts.warnings.length > 0) && <p role="alert" className="validation-message">Unbekanntes Bundesland: Bitte wähle den Objektstandort aus. Die Grunderwerbsteuer ist noch nicht zuverlässig berücksichtigt.</p>}
       {activeTab === 'premium' && (
         <>
         <PremiumAccessPanel

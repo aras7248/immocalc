@@ -480,3 +480,11 @@ test('A8: movable items reduce transfer tax only, bounded by purchase price', ()
  const s=calculateStandard({...commonInput,annualRent:21900,purchasePrice:r.base.maxPurchasePrice,movableItemsAmount:5000});
  closeTo(s.base.netRentalYieldPercent,5,1e-6);
 });
+
+test('B1: unknown and inherited property names warn instead of appearing valid',()=>{
+ for(const federalState of ['unknown','constructor','toString']){
+ const r=calculateStandard({...commonInput,federalState,purchasePrice:350000,annualRent:21900});
+ assert.deepEqual(r.acquisitionCosts.warnings,['unknown_federal_state']);
+ assert.equal(r.acquisitionCosts.landTransferTaxAmount,0);
+ }
+});

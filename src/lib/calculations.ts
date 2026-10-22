@@ -132,6 +132,7 @@ export interface NormalizedReverseCalculationInput
 }
 
 export interface AcquisitionCostsResult {
+  warnings: string[];
   landTransferTaxPercent: number;
   notaryPercent: number;
   brokerPercent: number;
@@ -304,7 +305,7 @@ function normalizeFederalState(value: string): string {
 
 export function getLandTransferTaxRate(federalState: string): number {
   const normalizedState = normalizeFederalState(federalState);
-  return normalizedState in LAND_TRANSFER_TAX_RATES_2026
+  return Object.hasOwn(LAND_TRANSFER_TAX_RATES_2026, normalizedState)
     ? LAND_TRANSFER_TAX_RATES_2026[normalizedState as FederalStateCode]
     : 0;
 }
@@ -366,6 +367,7 @@ export function calculateAcquisitionCosts(
   );
 
   return {
+    warnings: Object.hasOwn(LAND_TRANSFER_TAX_RATES_2026, parameters.federalState) ? [] : ["unknown_federal_state"],
     landTransferTaxPercent,
     notaryPercent: parameters.notaryPercent,
     brokerPercent: parameters.brokerPercent,

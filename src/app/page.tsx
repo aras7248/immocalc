@@ -1,6 +1,8 @@
 "use client";
 
 import Image from "next/image";
+import { useEntitlement } from "@/hooks/useEntitlement";
+import { canCreatePremiumProject, hasPremiumAccess } from "@/domain/immocalc/premium";
 import { EquityFields, DebtRateFields } from "@/components/immocalc/FinancingFields";
 import { emptyCalcState, emptyRevState, parseSavedObjectRow, type CalcState, type ReverseState, type SavedObject } from '@/domain/immocalc/state';
 import { InfoTooltip, CollapsibleSection } from '@/components/immocalc/CalculatorSections';
@@ -46,6 +48,7 @@ export default function Home() {
   const revIssues = validateFields({...rev, maklerProzent:rev.hasMakler?rev.maklerProzent:'0'}, parseNumber);
   const criticalInputError = Boolean(calcIssues.wohnflaeche || calcIssues.kaufpreis || revIssues.wohnflaeche);
   const { user, signOut } = useAuth();
+  const entitlement=useEntitlement(user?.id,supabase);
   const {savedObjects,setSavedObjects,loadError} = useSavedObjects(user?.id, supabase);
   const [isSavedObjectsOpen, setIsSavedObjectsOpen] = useState(false);
   const [isObjektInfoOpen, setIsObjektInfoOpen] = useState(false);
@@ -531,6 +534,7 @@ export default function Home() {
 
     // Prüfen, ob Objekt mit diesem Namen bereits existiert
     const existingIndex = savedObjects.findIndex(o => o.calc.objektname.trim() === trimmedName);
+    if(existingIndex===-1&&!canCreatePremiumProject(entitlement.level,savedObjects.length)){void notify('Dein ImmoCalc-Tarif erlaubt kein weiteres Objekt. Investor: bis zu 3 Objekte; Professional: unbegrenzt.');return;}
     let nameToSave = trimmedName;
     let existingDbId: string | undefined = undefined;
 
@@ -865,6 +869,7 @@ export default function Home() {
         <button type="button" onClick={()=>setLocationSuggestion(null)}>Verwerfen</button>
       </div>}
       <ActivePropertyBar
+        canSave={!entitlement.loading && (savedObjects.some(o=>o.calc.objektname.trim()===calc.objektname.trim()) || canCreatePremiumProject(entitlement.level,savedObjects.length))}
         errors={{livingArea:calcIssues.wohnflaeche,purchasePrice:calcIssues.kaufpreis}}
         objectName={calc.objektname}
         livingArea={calc.wohnflaeche}
@@ -883,6 +888,7 @@ export default function Home() {
       />
 
       {(standardResult.acquisitionCosts.warnings.length > 0 || reverseResult.base.acquisitionCosts.warnings.length > 0) && <p role="alert" className="validation-message">Unbekanntes Bundesland: Bitte wähle den Objektstandort aus. Die Grunderwerbsteuer ist noch nicht zuverlässig berücksichtigt.</p>}
+      {!hasPremiumAccess(entitlement.level) && <p role="status">{entitlement.loading?'Tarifberechtigung wird geprüft …':entitlement.error?'Tarifberechtigung konnte nicht geprüft werden. Bitte prüfe die Einrichtung der ImmoCalc-Migration.':'Neue Objekte und Premium-Analysen benötigen eine freigeschaltete ImmoCalc-Berechtigung. Eine Buchung ist noch nicht verfügbar.'}</p>}
       {activeTab === 'premium' && (
         <>
         <PremiumAccessPanel

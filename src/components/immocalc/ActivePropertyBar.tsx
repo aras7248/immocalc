@@ -6,6 +6,7 @@ import {
 import type { KeyboardEvent } from "react";
 
 interface ActivePropertyBarProps {
+  canSave?:boolean;
   errors?: {livingArea?:string;purchasePrice?:string};
   objectName: string;
   livingArea: string;
@@ -25,6 +26,7 @@ interface ActivePropertyBarProps {
 
 export function ActivePropertyBar({
   errors,
+  canSave=true,
   objectName,
   livingArea,
   purchasePrice,
@@ -98,7 +100,7 @@ export function ActivePropertyBar({
           type="button"
           className={`active-property__save${isSaved ? " active-property__save--saved" : ""}`}
           onClick={onSave}
-          disabled={isSaving || isSaved}
+          disabled={isSaving || isSaved || !canSave}
           title={isSaved ? "Immobilie ist gespeichert" : "Immobilie speichern"}
           aria-label={isSaving ? "Immobilie wird gespeichert" : isSaved ? "Immobilie ist gespeichert" : "Immobilie speichern"}
         >

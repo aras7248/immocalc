@@ -1,10 +1,11 @@
 "use client";
+import { trapDialogFocus } from '@/lib/dialogFocus';
 import {useEffect,useRef} from 'react';
 import type {OcrFields} from '@/lib/ocr';
 export function OcrReviewDialog({result,onCancel,onApply}:{result:OcrFields;onCancel:()=>void;onApply:()=>void}){
  const ref=useRef<HTMLDialogElement>(null);
  useEffect(()=>{const node=ref.current;node?.showModal();return()=>{node?.close();};},[]);
- return <dialog ref={ref} className="glass-panel scan-dialog" aria-labelledby="scan-result-title" onCancel={e=>{e.preventDefault();onCancel();}}>
+ return <dialog onKeyDown={trapDialogFocus} ref={ref} className="glass-panel scan-dialog" aria-labelledby="scan-result-title" onCancel={e=>{e.preventDefault();onCancel();}}>
             <h2 id="scan-result-title" style={{ color: 'var(--success-strong)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
               Erkannte Werte prüfen

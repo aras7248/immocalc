@@ -376,3 +376,81 @@ test("A4: both calculators bound rent and cost changes consistently", () => {
     assert.deepEqual(reverse.scenarioOperatingCosts, standard.scenarioOperatingCosts);
   }
 });
+
+for (const equityPercentOfPrice of [0, 20, 100]) {
+  test(`A5: ${equityPercentOfPrice}% equity reduces principal and uses total equity for returns`, () => {
+    const result = calculateStandard({ ...commonInput, purchasePrice: 350_000, annualRent: 21_900, equityPercentOfPrice });
+    const equityInPrice = 350_000 * equityPercentOfPrice / 100;
+    const principal = 350_000 - equityInPrice;
+    closeTo(result.financing.equityInPrice, equityInPrice);
+    closeTo(result.financing.principal, principal);
+    closeTo(result.financing.interestAnnual, principal * 0.04);
+    closeTo(result.financing.repaymentAnnual, principal * 0.015);
+    closeTo(result.financing.annuityAnnual, principal * 0.055);
+    closeTo(result.totalEquityRequired, 42_245 + equityInPrice);
+    closeTo(result.totalInvestment, principal + result.totalEquityRequired);
+    closeTo(result.base.cashFlowAnnual, 17_724 - principal * 0.055);
+    closeTo(result.base.returnOnEquityPercent, result.base.cashFlowAnnual / result.totalEquityRequired * 100);
+    closeTo(result.acquisitionCosts.totalAmount, 42_245);
+    closeTo(result.base.netRentalYieldPercent, 17_724 / 392_245 * 100);
+  });
+}
+
+test("A5: zero equity preserves the previous standard and reverse model", () => {
+  const input = { ...commonInput, purchasePrice: 350_000, annualRent: 21_900 };
+  assert.deepEqual(calculateStandard(input), calculateStandard({ ...input, equityPercentOfPrice: 0 }));
+  const reverse = { ...commonInput, targetAnnualRent: 21_900, offeredPurchasePrice: 350_000 };
+  assert.deepEqual(calculateReverse(reverse), calculateReverse({ ...reverse, equityPercentOfPrice: 0 }));
+});
+
+test("A5: reverse price and offer analysis match financing with equity", () => {
+  const input = { ...commonInput, equityPercentOfPrice: 20, vacancyPercent: 2, scenarioRentIncreasePercent: -10, scenarioCostIncreasePercent: 2 };
+  const reverse = calculateReverse({ ...input, targetAnnualRent: 21_900, offeredPurchasePrice: 350_000 });
+  closeTo(reverse.base.maxPurchasePrice, (21_900 * 0.98 - 4_176) / (0.055 * 0.8));
+  for (const which of ["base", "scenario"] as const) {
+    const result = calculateStandard({ ...input, purchasePrice: reverse[which].maxPurchasePrice, annualRent: 21_900 });
+    closeTo(result[which].cashFlowAnnual, 0);
+    closeTo(reverse[which].totalEquityRequired, result.totalEquityRequired);
+    closeTo(reverse[which].financing.principal, result.financing.principal);
+  }
+  const offer = calculateStandard({ ...input, purchasePrice: 350_000, annualRent: reverse.offerAnalysis.requiredAnnualRent });
+  closeTo(offer.base.cashFlowAnnual, 0);
+  closeTo(reverse.offerAnalysis.financing.principal, 280_000);
+  closeTo(reverse.offerAnalysis.totalEquityRequired, 112_245);
+});
+
+test("A5: full equity reports an unbounded cashflow price rather than a finite ceiling", () => {
+  const input = { ...commonInput, equityPercentOfPrice: 100, targetAnnualRent: 21_900, offeredPurchasePrice: 350_000 };
+  const result = calculateReverse(input);
+  assert.equal(result.base.priceLimitStatus, "unbounded");
+  assert.equal(result.scenario.priceLimitStatus, "unbounded");
+  assert.equal(result.offerAnalysis.financing.principal, 0);
+  closeTo(result.offerAnalysis.totalEquityRequired, 392_245);
+  closeTo(result.offerAnalysis.requiredAnnualRent, 4_176);
+  assert.equal(result.offerAnalysis.isAffordableAtTargetRent, true);
+  assert.equal(calculateReverse({ ...input, targetAnnualRent: 1_000 }).base.priceLimitStatus, "unaffordable");
+});
+
+test("A5: fixed interest years are optional metadata and do not change first-year results", () => {
+  const input = { ...commonInput, purchasePrice: 350_000, annualRent: 21_900, equityPercentOfPrice: 20 };
+  const baseline = calculateStandard(input);
+  const result = calculateStandard({ ...input, fixedInterestYears: 10 });
+  assert.equal(baseline.financing.fixedInterestYears, null);
+  assert.equal(result.financing.fixedInterestYears, 10);
+  assert.deepEqual(result.base, baseline.base);
+  assert.deepEqual(result.scenario, baseline.scenario);
+  const reverse = calculateReverse({ ...commonInput, targetAnnualRent: 21_900, offeredPurchasePrice: 350_000, fixedInterestYears: 15 });
+  assert.equal(reverse.base.financing.fixedInterestYears, 15);
+  assert.equal(reverse.offerAnalysis.financing.fixedInterestYears, 15);
+});
+
+test("A5: financing parameters are normalized defensively", () => {
+  for (const [raw, expected] of [[-1, 0], [150, 100], [NaN, 0], [Infinity, 0]]) {
+    const result = calculateStandard({ ...commonInput, purchasePrice: 350_000, annualRent: 21_900, equityPercentOfPrice: raw });
+    assert.equal(result.input.equityPercentOfPrice, expected);
+  }
+  for (const [raw, expected] of [[0, null], [NaN, null], [Infinity, null], [10.8, 10], [50, 30]]) {
+    const result = calculateStandard({ ...commonInput, purchasePrice: 350_000, annualRent: 21_900, fixedInterestYears: raw ?? undefined });
+    assert.equal(result.input.fixedInterestYears, expected);
+  }
+});

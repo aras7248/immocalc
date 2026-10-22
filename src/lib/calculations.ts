@@ -4,7 +4,7 @@ import { normalizeScenarioPercent } from "./scenario.ts";
  * Pure real-estate calculations used by the standard and reverse calculators.
  *
  * Financing model:
- * - the purchase price is financed in full;
+ * - the purchase price is financed after deducting the chosen equity share;
  * - acquisition costs are paid from equity;
  * - all monetary values are expressed in euros.
  */
@@ -65,6 +65,8 @@ export interface StandardCalculationInput
   scenarioRentIncreasePercent?: number;
   scenarioCostIncreasePercent?: number;
   vacancyPercent?: number;
+  equityPercentOfPrice?: number;
+  fixedInterestYears?: number;
 }
 
 export interface ReverseCalculationInput
@@ -77,6 +79,8 @@ export interface ReverseCalculationInput
   scenarioRentIncreasePercent?: number;
   scenarioCostIncreasePercent?: number;
   vacancyPercent?: number;
+  equityPercentOfPrice?: number;
+  fixedInterestYears?: number;
 }
 
 export interface NormalizedAcquisitionCostParameters {
@@ -103,6 +107,8 @@ export interface NormalizedStandardCalculationInput
   scenarioRentIncreasePercent: number;
   scenarioCostIncreasePercent: number;
   vacancyPercent: number;
+  equityPercentOfPrice: number;
+  fixedInterestYears: number | null;
 }
 
 export interface NormalizedReverseCalculationInput
@@ -115,6 +121,8 @@ export interface NormalizedReverseCalculationInput
   scenarioRentIncreasePercent: number;
   scenarioCostIncreasePercent: number;
   vacancyPercent: number;
+  equityPercentOfPrice: number;
+  fixedInterestYears: number | null;
 }
 
 export interface AcquisitionCostsResult {
@@ -126,7 +134,7 @@ export interface AcquisitionCostsResult {
   notaryAmount: number;
   brokerAmount: number;
   totalAmount: number;
-  /** The acquisition costs are the equity required by this financing model. */
+  /** Acquisition-cost equity only; totalEquityRequired also includes equity in price. */
   equityRequired: number;
 }
 
@@ -140,6 +148,8 @@ export interface OperatingCostsResult {
 
 export interface FinancingResult {
   principal: number;
+  equityInPrice: number;
+  fixedInterestYears: number | null;
   interestPercent: number;
   repaymentPercent: number;
   annuityPercent: number;
@@ -194,6 +204,7 @@ export interface SquareMeterValues {
 }
 
 export interface StandardCalculationResult {
+  totalEquityRequired: number;
   input: NormalizedStandardCalculationInput;
   acquisitionCosts: AcquisitionCostsResult;
   totalInvestment: number;
@@ -206,6 +217,10 @@ export interface StandardCalculationResult {
 }
 
 export interface ReverseCaseResult {
+  totalEquityRequired: number;
+  financing: FinancingResult;
+  /** If unbounded or unaffordable, maxPurchasePrice is a numeric placeholder (0). */
+  priceLimitStatus: "bounded" | "unbounded" | "unaffordable";
   effectiveAnnualRent: number;
   vacancyAnnual: number;
   annualRent: number;
@@ -231,6 +246,8 @@ export interface ReverseCalculationResult {
 }
 
 export interface ReverseOfferAnalysisResult {
+  totalEquityRequired: number;
+  financing: FinancingResult;
   offeredPurchasePrice: number;
   acquisitionCosts: AcquisitionCostsResult;
   totalInvestment: number;
@@ -247,6 +264,16 @@ export interface ReverseOfferAnalysisResult {
  */
 export function normalizeFiniteNonNegative(value: number): number {
   return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+export function normalizeEquityPercent(value = 0): number {
+  return Math.min(100, normalizeFiniteNonNegative(value));
+}
+
+/** Optional whole years; the upcoming projection supports up to 30 years. */
+export function normalizeFixedInterestYears(value?: number): number | null {
+  if (value === undefined || !Number.isFinite(value) || value < 1) return null;
+  return Math.min(30, Math.floor(value));
 }
 
 function finiteResult(value: number): number {
@@ -382,18 +409,24 @@ function calculateFinancing(
   purchasePrice: number,
   interestPercent: number,
   repaymentPercent: number,
+  equityPercentOfPrice = 0,
+  fixedInterestYears: number | null = null,
 ): FinancingResult {
+  const equityInPrice = nonNegativeResult(purchasePrice * equityPercentOfPrice / 100);
+  const principal = nonNegativeResult(purchasePrice - equityInPrice);
   const annuityPercent = nonNegativeResult(interestPercent + repaymentPercent);
   const interestAnnual = nonNegativeResult(
-    purchasePrice * (interestPercent / 100),
+    principal * (interestPercent / 100),
   );
   const repaymentAnnual = nonNegativeResult(
-    purchasePrice * (repaymentPercent / 100),
+    principal * (repaymentPercent / 100),
   );
   const annuityAnnual = nonNegativeResult(interestAnnual + repaymentAnnual);
 
   return {
-    principal: purchasePrice,
+    principal,
+    equityInPrice,
+    fixedInterestYears,
     interestPercent,
     repaymentPercent,
     annuityPercent,
@@ -461,7 +494,7 @@ function calculateStandardCase(
   purchasePrice: number,
   totalInvestment: number,
   livingArea: number,
-  acquisitionCostEquity: number,
+  totalEquityRequired: number,
   operatingCosts: OperatingCostsResult,
   financing: FinancingResult,
   vacancyPercent: number,
@@ -491,7 +524,7 @@ function calculateStandardCase(
       safeRatio(purchasePrice, annualRent),
     ),
     returnOnEquityPercent: finiteResult(
-      safeRatio(cashFlowAnnual, acquisitionCostEquity) * 100,
+      safeRatio(cashFlowAnnual, totalEquityRequired) * 100,
     ),
     monthlyRentPerSqm: nonNegativeResult(
       safeRatio(monthlyRent, livingArea),
@@ -517,6 +550,8 @@ export function calculateStandard(
     interestPercent: normalizeFiniteNonNegative(input.interestPercent),
     repaymentPercent: normalizeFiniteNonNegative(input.repaymentPercent),
     vacancyPercent: normalizeVacancyPercent(input.vacancyPercent),
+    equityPercentOfPrice: normalizeEquityPercent(input.equityPercentOfPrice),
+    fixedInterestYears: normalizeFixedInterestYears(input.fixedInterestYears),
     scenarioCostIncreasePercent: normalizeScenarioPercent(input.scenarioCostIncreasePercent ?? 0),
     scenarioRentIncreasePercent: normalizeScenarioPercent(
       input.scenarioRentIncreasePercent ?? 0,
@@ -533,6 +568,8 @@ export function calculateStandard(
     normalizedInput.purchasePrice,
     normalizedInput.interestPercent,
     normalizedInput.repaymentPercent,
+    normalizedInput.equityPercentOfPrice,
+    normalizedInput.fixedInterestYears,
   );
   const operatingCosts = calculateOperatingCosts(normalizedInput);
   const scenarioOperatingCosts = calculateScenarioOperatingCosts(operatingCosts, normalizedInput.scenarioCostIncreasePercent);
@@ -545,7 +582,7 @@ export function calculateStandard(
     normalizedInput.purchasePrice,
     totalInvestment,
     normalizedInput.livingArea,
-    acquisitionCosts.equityRequired,
+    acquisitionCosts.equityRequired + financing.equityInPrice,
     operatingCosts,
     financing,
     normalizedInput.vacancyPercent,
@@ -555,7 +592,7 @@ export function calculateStandard(
     normalizedInput.purchasePrice,
     totalInvestment,
     normalizedInput.livingArea,
-    acquisitionCosts.equityRequired,
+    acquisitionCosts.equityRequired + financing.equityInPrice,
     scenarioOperatingCosts,
     financing,
     normalizedInput.vacancyPercent,
@@ -566,6 +603,7 @@ export function calculateStandard(
     acquisitionCosts,
     totalInvestment,
     financing,
+    totalEquityRequired: acquisitionCosts.totalAmount + financing.equityInPrice,
     operatingCosts,
     scenarioOperatingCosts,
     squareMeterValues: {
@@ -592,10 +630,13 @@ function calculateReverseCase(
   const effectiveAnnualRent = annualRent * (1 - normalizedInput.vacancyPercent / 100);
   const noiAnnual = finiteResult(effectiveAnnualRent - operatingCosts.totalAnnual);
   const availableAnnuityAnnual = nonNegativeResult(noiAnnual);
-  const maxPurchasePrice =
-    annuityPercent > 0
-      ? nonNegativeResult(availableAnnuityAnnual / (annuityPercent / 100))
-      : 0;
+  const debtFraction = 1 - normalizedInput.equityPercentOfPrice / 100;
+  const annualDebtRateOfPrice = annuityPercent / 100 * debtFraction;
+  const priceLimitStatus: ReverseCaseResult["priceLimitStatus"] = noiAnnual < 0
+    ? "unaffordable" : annualDebtRateOfPrice === 0 ? "unbounded" : "bounded";
+  // Without debt service the cashflow model cannot derive a finite price ceiling.
+  const maxPurchasePrice = annualDebtRateOfPrice > 0
+    ? nonNegativeResult(availableAnnuityAnnual / annualDebtRateOfPrice) : 0;
   const acquisitionCosts = calculateAcquisitionCosts(
     maxPurchasePrice,
     normalizedInput,
@@ -604,8 +645,13 @@ function calculateReverseCase(
     maxPurchasePrice + acquisitionCosts.totalAmount,
   );
   const monthlyRent = nonNegativeResult(annualRent / 12);
+  const financing = calculateFinancing(maxPurchasePrice, normalizedInput.interestPercent,
+    normalizedInput.repaymentPercent, normalizedInput.equityPercentOfPrice, normalizedInput.fixedInterestYears);
 
   return {
+    priceLimitStatus,
+    financing,
+    totalEquityRequired: acquisitionCosts.totalAmount + financing.equityInPrice,
     annualRent,
     effectiveAnnualRent,
     vacancyAnnual: annualRent - effectiveAnnualRent,
@@ -642,6 +688,8 @@ export function calculateReverse(
     interestPercent: normalizeFiniteNonNegative(input.interestPercent),
     repaymentPercent: normalizeFiniteNonNegative(input.repaymentPercent),
     vacancyPercent: normalizeVacancyPercent(input.vacancyPercent),
+    equityPercentOfPrice: normalizeEquityPercent(input.equityPercentOfPrice),
+    fixedInterestYears: normalizeFixedInterestYears(input.fixedInterestYears),
     scenarioCostIncreasePercent: normalizeScenarioPercent(input.scenarioCostIncreasePercent ?? 0),
     scenarioRentIncreasePercent: normalizeScenarioPercent(
       input.scenarioRentIncreasePercent ?? 0,
@@ -660,9 +708,12 @@ export function calculateReverse(
     normalizedInput.offeredPurchasePrice,
     normalizedInput,
   );
+  const offerFinancing = calculateFinancing(normalizedInput.offeredPurchasePrice,
+    normalizedInput.interestPercent, normalizedInput.repaymentPercent,
+    normalizedInput.equityPercentOfPrice, normalizedInput.fixedInterestYears);
   const effectiveRentFraction = 1 - normalizedInput.vacancyPercent / 100;
   const requiredEffectiveRent = nonNegativeResult(
-    normalizedInput.offeredPurchasePrice * (annuityPercent / 100) + operatingCosts.totalAnnual,
+    offerFinancing.annuityAnnual + operatingCosts.totalAnnual,
   );
   // At 100% vacancy no finite contractual rent can cover a positive outflow.
   const requiredAnnualRent = effectiveRentFraction > 0
@@ -688,6 +739,8 @@ export function calculateReverse(
       annuityPercent,
     ),
     offerAnalysis: {
+      financing: offerFinancing,
+      totalEquityRequired: offerAcquisitionCosts.totalAmount + offerFinancing.equityInPrice,
       offeredPurchasePrice: normalizedInput.offeredPurchasePrice,
       acquisitionCosts: offerAcquisitionCosts,
       totalInvestment: nonNegativeResult(

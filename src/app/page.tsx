@@ -13,6 +13,9 @@ import {
   calculateStandard,
   LAND_TRANSFER_TAX_RATES_2026,
   DEFAULT_VACANCY_PERCENT,
+  normalizeEquityPercent,
+  normalizeFixedInterestYears,
+  type ReverseCaseResult,
 } from '@/lib/calculations';
 import { supabase } from '@/lib/supabase';
 import { normalizeScenarioPercent, SCENARIO_PERCENT_MIN, SCENARIO_PERCENT_MAX } from '@/lib/scenario';
@@ -81,6 +84,8 @@ interface CalcState {
   maklerProzent: string;
   zins: string;
   tilgung: string;
+  equityPercentOfPrice: string;
+  fixedInterestYears: string;
   mietePM: string;
   mietePA: string;
   wohnflaeche: string;
@@ -101,6 +106,8 @@ interface ReverseState {
   maklerProzent: string;
   zins: string;
   tilgung: string;
+  equityPercentOfPrice: string;
+  fixedInterestYears: string;
   zielMietePA: string;
   zielMietpreisQm: string; // NEU
   instandhaltungQm: string;
@@ -194,6 +201,8 @@ const initialCalcState: CalcState = {
   maklerProzent: "3,57",
   zins: "4,00",
   tilgung: "1,50",
+  equityPercentOfPrice: "0,00",
+  fixedInterestYears: "",
   mietePM: "1.825,00",
   mietePA: "21.900,00",
   wohnflaeche: "268,00",
@@ -213,6 +222,8 @@ const initialRevState: ReverseState = {
   maklerProzent: "3,57",
   zins: "4,00",
   tilgung: "1,50",
+  equityPercentOfPrice: "0,00",
+  fixedInterestYears: "",
   zielMietePA: "32.160,00",
   zielMietpreisQm: "10,00",
   instandhaltungQm: "1,00",
@@ -231,6 +242,8 @@ const emptyCalcState: CalcState = {
   maklerProzent: "",
   zins: "",
   tilgung: "",
+  equityPercentOfPrice: "0,00",
+  fixedInterestYears: "",
   mietePM: "",
   mietePA: "",
   wohnflaeche: "",
@@ -250,6 +263,8 @@ const emptyRevState: ReverseState = {
   maklerProzent: "",
   zins: "",
   tilgung: "",
+  equityPercentOfPrice: "0,00",
+  fixedInterestYears: "",
   zielMietePA: "",
   zielMietpreisQm: "",
   instandhaltungQm: "",
@@ -288,6 +303,12 @@ function parseSavedObjectRow(row: unknown): SavedObject | null {
     rentIncrease: parsedRentIncrease,
     scenarioCostIncreasePercent: readSavedScenarioCostIncrease(payload.scenarioCostIncreasePercent),
   };
+}
+
+function describePriceLimit(result: ReverseCaseResult): string {
+  if (result.priceLimitStatus === "unbounded") return "Keine Kaufpreisgrenze ableitbar";
+  if (result.priceLimitStatus === "unaffordable") return "Miete deckt laufende Kosten nicht";
+  return `${formatAcc(result.maxPurchasePrice)} €`;
 }
 
 export default function Home() {
@@ -673,6 +694,8 @@ export default function Home() {
     reserveMonthly: parseNumber(calc.ruecklagePm),
     interestPercent: zins,
     repaymentPercent: tilgung,
+    equityPercentOfPrice: parseNumber(calc.equityPercentOfPrice),
+    fixedInterestYears: calc.fixedInterestYears ? parseNumber(calc.fixedInterestYears) : undefined,
     scenarioRentIncreasePercent: rentIncrease,
     scenarioCostIncreasePercent,
   });
@@ -755,15 +778,17 @@ export default function Home() {
     reserveMonthly: parseNumber(rev.ruecklagePm),
     interestPercent: parseNumber(rev.zins),
     repaymentPercent: parseNumber(rev.tilgung),
+    equityPercentOfPrice: parseNumber(rev.equityPercentOfPrice),
+    fixedInterestYears: rev.fixedInterestYears ? parseNumber(rev.fixedInterestYears) : undefined,
     scenarioRentIncreasePercent: rentIncrease,
     scenarioCostIncreasePercent,
   });
   const revGesamtNkProzent = reverseResult.base.acquisitionCosts.totalPercent;
-  const revKaufpreis = reverseResult.base.maxPurchasePrice;
+  const revPriceHasLimit = reverseResult.base.priceLimitStatus === "bounded";
   const revMaxGesamtKaufpreis = reverseResult.base.totalInvestment;
   const revNkEuro = reverseResult.base.acquisitionCosts.totalAmount;
   const revMaklerEuro = reverseResult.base.acquisitionCosts.brokerAmount;
-  const revKaufpreisNeu = reverseResult.scenario.maxPurchasePrice;
+
   const revLaufendeKostenPA = reverseResult.operatingCosts.totalAnnual;
   const revAngebot = reverseResult.offerAnalysis;
 
@@ -780,6 +805,8 @@ export default function Home() {
       maklerProzent: calc.maklerProzent,
       zins: calc.zins,
       tilgung: calc.tilgung,
+      equityPercentOfPrice: calc.equityPercentOfPrice,
+      fixedInterestYears: calc.fixedInterestYears,
       instandhaltungQm: calc.instandhaltungQm,
       verwaltungPm: calc.verwaltungPm,
       ruecklagePm: calc.ruecklagePm,
@@ -797,6 +824,8 @@ export default function Home() {
       maklerProzent: true,
       zins: true,
       tilgung: true,
+      equityPercentOfPrice: true,
+      fixedInterestYears: true,
       vacancyPercent: true,
       instandhaltungQm: true,
       verwaltungPm: true,
@@ -1515,6 +1544,25 @@ export default function Home() {
                 <h3 className="cluster-title">5. Finanzierung</h3>
                 <div className="calculation-row">
                   <div className="input-group input-optional">
+                    <label htmlFor="standard-equity-percent">Eigenkapital im Kaufpreis</label>
+                    <div className="input-wrapper">
+                      <input id="standard-equity-percent" type="text" inputMode="decimal" value={calc.equityPercentOfPrice} onChange={(e) => updateCalc("equityPercentOfPrice", e.target.value)} onBlur={() => updateCalc("equityPercentOfPrice", formatAcc(normalizeEquityPercent(parseNumber(calc.equityPercentOfPrice))))} onKeyDown={handleEnterKey} aria-describedby="standard-equity-help" aria-invalid={parseNumber(calc.equityPercentOfPrice) < 0 || parseNumber(calc.equityPercentOfPrice) > 100} />
+                      <span className="input-suffix">%</span>
+                    </div>
+                    <small id="standard-equity-help">0 bis 100 % des Kaufpreises, zusätzlich zu den vollständig aus Eigenkapital bezahlten Kaufnebenkosten.</small>
+                  </div>
+                  <div className="input-group input-optional">
+                    <label htmlFor="standard-fixed-interest-years">Zinsbindung (optional)</label>
+                    <div className="input-wrapper">
+                      <input id="standard-fixed-interest-years" type="text" inputMode="numeric" value={calc.fixedInterestYears} onChange={(e) => updateCalc("fixedInterestYears", e.target.value)} onBlur={() => updateCalc("fixedInterestYears", String(normalizeFixedInterestYears(parseNumber(calc.fixedInterestYears)) ?? ""))} onKeyDown={handleEnterKey} aria-describedby="standard-fixed-interest-help" />
+                      <span className="input-suffix">Jahre</span>
+                    </div>
+                    <small id="standard-fixed-interest-help">1 bis 30 volle Jahre. Die Zinsbindung wird gespeichert; die angezeigten Kennzahlen beziehen sich auf das erste Jahr.</small>
+                  </div>
+                </div>
+
+                <div className="calculation-row">
+                  <div className="input-group input-optional">
                     <label htmlFor="interest-percent">Zins</label>
                     <div className="input-wrapper">
                       <input id="interest-percent" inputMode="decimal" type="text" value={calc.zins} onChange={(e) => updateCalc("zins", e.target.value)} onBlur={() => handleBlurCalc("zins")} onKeyDown={handleEnterKey} />
@@ -1605,7 +1653,7 @@ export default function Home() {
                       ) : roe >= 5 ? (
                         <>
                           <span style={{ color: 'var(--warning-color)', fontWeight: 700 }}>Positiver Cash-on-Cash-Wert</span><br />
-                          Das Szenario liefert {formatAcc(roe)}% auf die als Eigenkapital angesetzten Kaufnebenkosten. Zusätzliche Risiken sind noch nicht enthalten.
+                          Das Szenario liefert {formatAcc(roe)}% auf dein gesamtes eingesetztes Eigenkapital. Zusätzliche Risiken sind noch nicht enthalten.
                         </>
                       ) : (
                         <>
@@ -1627,7 +1675,7 @@ export default function Home() {
                       <InfoTooltip
                         id="roe"
                         title="Cash-on-Cash-Rendite"
-                        text="Berechnung: Jahrescashflow nach laufenden Kosten und Annuität geteilt durch die als Eigenkapital angesetzten Kaufnebenkosten. Modellannahme: Der Kaufpreis wird vollständig finanziert."
+                        text="Berechnung vor Steuern: Jahrescashflow nach laufenden Kosten und Annuität geteilt durch Kaufnebenkosten plus Eigenkapital im Kaufpreis. Der Darlehensbetrag sinkt um deinen Eigenkapitalanteil am Kaufpreis."
                         activeId={activeTooltip}
                         onToggle={(id) => setActiveTooltip(activeTooltip === id ? null : id)}
                       />
@@ -1635,7 +1683,7 @@ export default function Home() {
                     <span className={`value ${roe >= 0 ? 'positive' : 'negative'}`} style={{ fontSize: '1.5rem' }}>
                       {formatAcc(roe)} %
                     </span>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>auf eingesetzte Nebenkosten</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>auf gesamtes eingesetztes Eigenkapital</span>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
@@ -1682,6 +1730,12 @@ export default function Home() {
                   </div>
                 </div>
 
+                <div className="metric-summary" aria-label="Finanzierungsstruktur">
+                  <div><span>Darlehensbetrag</span><strong>{formatAcc(standardResult.financing.principal)} €</strong></div>
+                  <div><span>Eigenkapital im Kaufpreis</span><strong>{formatAcc(standardResult.financing.equityInPrice)} €</strong></div>
+                  <div><span>Eigenkapital gesamt (inkl. NK)</span><strong>{formatAcc(standardResult.totalEquityRequired)} €</strong></div>
+                  {standardResult.financing.fixedInterestYears !== null && <div><span>Zinsbindung</span><strong>{standardResult.financing.fixedInterestYears} Jahre</strong></div>}
+                </div>
                 <div className="metric-summary" aria-label="Laufende Kosten und Netto-Mietertrag">
                   <div><span>Mietausfall / Jahr</span><strong>−{formatAcc(standardCase.vacancyAnnual)} €</strong></div>
                   <div>
@@ -1991,7 +2045,7 @@ export default function Home() {
                     <div className="input-group output-calc">
                       <label htmlFor="reverse-broker-amount">Maklerprovision (€)</label>
                       <div className="input-wrapper" style={{ opacity: rev.hasMakler ? 1 : 0.5 }}>
-                        <input id="reverse-broker-amount" type="text" readOnly value={formatAcc(revMaklerEuro)} />
+                        <input id="reverse-broker-amount" type="text" readOnly value={reverseResult.base.priceLimitStatus === "bounded" ? formatAcc(revMaklerEuro) : "—"} />
                         <span className="input-suffix">€</span>
                       </div>
                     </div>
@@ -2034,6 +2088,24 @@ export default function Home() {
                     <small id="reverse-vacancy-percent-help">0 bis 100 % der Soll-Jahresmiete. Bruttorendite und Kaufpreisfaktor verwenden weiterhin die Soll-Miete.</small>
                   </div>
 
+                <div className="calculation-row">
+                  <div className="input-group input-optional">
+                    <label htmlFor="reverse-equity-percent">Eigenkapital im Kaufpreis</label>
+                    <div className="input-wrapper">
+                      <input id="reverse-equity-percent" type="text" inputMode="decimal" value={rev.equityPercentOfPrice} onChange={(e) => updateRev("equityPercentOfPrice", e.target.value)} onBlur={() => updateRev("equityPercentOfPrice", formatAcc(normalizeEquityPercent(parseNumber(rev.equityPercentOfPrice))))} onKeyDown={handleEnterKey} aria-describedby="reverse-equity-help" aria-invalid={parseNumber(rev.equityPercentOfPrice) < 0 || parseNumber(rev.equityPercentOfPrice) > 100} />
+                      <span className="input-suffix">%</span>
+                    </div>
+                    <small id="reverse-equity-help">0 bis 100 % des Kaufpreises, zusätzlich zu den vollständig aus Eigenkapital bezahlten Kaufnebenkosten.</small>
+                  </div>
+                  <div className="input-group input-optional">
+                    <label htmlFor="reverse-fixed-interest-years">Zinsbindung (optional)</label>
+                    <div className="input-wrapper">
+                      <input id="reverse-fixed-interest-years" type="text" inputMode="numeric" value={rev.fixedInterestYears} onChange={(e) => updateRev("fixedInterestYears", e.target.value)} onBlur={() => updateRev("fixedInterestYears", String(normalizeFixedInterestYears(parseNumber(rev.fixedInterestYears)) ?? ""))} onKeyDown={handleEnterKey} aria-describedby="reverse-fixed-interest-help" />
+                      <span className="input-suffix">Jahre</span>
+                    </div>
+                    <small id="reverse-fixed-interest-help">1 bis 30 volle Jahre. Die Zinsbindung wird gespeichert; die angezeigten Kennzahlen beziehen sich auf das erste Jahr.</small>
+                  </div>
+                </div>
                   <div className="calculation-row">
                     <div className="input-group input-optional">
                       <label htmlFor="reverse-interest">Zins</label>
@@ -2059,7 +2131,7 @@ export default function Home() {
               <CollapsibleSection
                 title="Ergebnis (Break-Even)"
                 icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>}
-                badge={`${formatAcc(revKaufpreis)} €`}
+                badge={describePriceLimit(reverseResult.base)}
               >
                 <section style={{ padding: '1rem', background: 'var(--output-calc-bg)', borderRadius: '0 0 12px 12px' }}>
                   <h3 style={{ marginBottom: '1rem', color: 'var(--success-color)' }}>Ergebnis (Break-Even)</h3>
@@ -2068,14 +2140,14 @@ export default function Home() {
                     <div className="result-card" style={{ padding: '1rem', border: '2px solid var(--success-color)' }}>
                       <span className="label">Max. Kaufpreis (vor NK)</span>
                       <span className="value positive" style={{ fontSize: '1.8rem' }}>
-                        {formatAcc(revKaufpreis)} €
+                        {describePriceLimit(reverseResult.base)}
                       </span>
                     </div>
 
                     <div className="result-card" style={{ padding: '1rem' }}>
                       <span className="label">Gesamtkaufpreis (inkl. NK)</span>
                       <span className="value" style={{ fontSize: '1.4rem' }}>
-                        {formatAcc(revMaxGesamtKaufpreis)} €
+                        {reverseResult.base.priceLimitStatus === "bounded" ? `${formatAcc(revMaxGesamtKaufpreis)} €` : "—"}
                       </span>
                     </div>
 
@@ -2089,15 +2161,20 @@ export default function Home() {
                           Für {formatAcc(revAngebot.offeredPurchasePrice)} € Kaufpreis sind mindestens {formatAcc(revAngebot.requiredMonthlyRentPerSqm)} €/m² bzw. {formatAcc(revAngebot.requiredMonthlyRent)} € Kaltmiete pro Monat erforderlich.
                         </small>
                         <small style={{ color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                          Gesamtinvestition inklusive Kaufnebenkosten: {formatAcc(revAngebot.totalInvestment)} €.
+                          Gesamtinvestition inklusive Kaufnebenkosten: {formatAcc(revAngebot.totalInvestment)} €. Darlehen: {formatAcc(revAngebot.financing.principal)} €. Eigenkapital gesamt: {formatAcc(revAngebot.totalEquityRequired)} €.
                         </small>
                       </div>
                     )}
                   </div> {/* End Hero Vertical */}
 
                   <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)', fontSize: '0.9rem' }}>
-                    <span>Anteil NK: <strong>{formatAcc(revNkEuro)} €</strong></span>
+                    <span>Anteil NK: <strong>{revPriceHasLimit ? `${formatAcc(revNkEuro)} €` : "—"}</strong></span>
                   </div>
+                  {revPriceHasLimit && <div className="metric-summary" aria-label="Finanzierung beim errechneten Kaufpreis">
+                    <div><span>Darlehen beim errechneten Kaufpreis</span><strong>{formatAcc(reverseResult.base.financing.principal)} €</strong></div>
+                    <div><span>Eigenkapital gesamt (inkl. NK)</span><strong>{formatAcc(reverseResult.base.totalEquityRequired)} €</strong></div>
+                  </div>}
+                  {!revPriceHasLimit && <p role="status">{reverseResult.base.priceLimitStatus === "unbounded" ? "Ohne Darlehensrate lässt sich aus dem Cashflow keine endliche Kaufpreisgrenze bestimmen. Das Modell berücksichtigt hier keine Begrenzung deines verfügbaren Eigenkapitals." : "Die Zielmiete reicht bereits für die laufenden Kosten nicht aus."}</p>}
                   <div className="reverse-assumption">
                     <span>Laufende Kosten p.a.</span>
                     <strong>-{formatAcc(revLaufendeKostenPA)} €</strong>
@@ -2126,9 +2203,9 @@ export default function Home() {
                   </div>
                     <label htmlFor="rent-increase" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 500 }}>
                       <span>Mietänderung ({rentIncrease > 0 ? "+" : ""}{formatAcc(rentIncrease)} %)</span>
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Max Kaufpreis neu: <span className="positive" style={{ fontWeight: 700 }}>{formatAcc(revKaufpreisNeu)} €</span></span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Max Kaufpreis neu: <span className="positive" style={{ fontWeight: 700 }}>{describePriceLimit(reverseResult.scenario)}</span></span>
                       <div className="scenario-note">
-                        <span>Bei {formatAcc(rentIncrease)} % Miet- und {formatAcc(scenarioCostIncreasePercent)} % Kostenänderung: <strong>{formatAcc(revKaufpreisNeu)} €</strong></span>
+                        <span>Bei {formatAcc(rentIncrease)} % Miet- und {formatAcc(scenarioCostIncreasePercent)} % Kostenänderung: <strong>{describePriceLimit(reverseResult.scenario)}</strong></span>
                       </div>
                     </label>
                     <div className="input-group input-optional">

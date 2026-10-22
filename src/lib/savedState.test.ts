@@ -38,3 +38,10 @@ test("A4: negative scenario changes survive JSON save and reload", async () => {
   assert.equal(readSavedScenarioCostIncrease(payload.scenarioCostIncreasePercent), -2.5);
   assert.equal(readSavedScenarioCostIncrease(-75), -50);
 });
+
+test("A5: legacy objects default to zero equity and optional interest term", () => {
+  const defaults = { equityPercentOfPrice: "0,00", fixedInterestYears: "", zins: "4,00" };
+  assert.deepEqual(mergeState(defaults, { zins: "3,80" }), { ...defaults, zins: "3,80" });
+  const saved = JSON.parse(JSON.stringify({ equityPercentOfPrice: "20,00", fixedInterestYears: "10" }));
+  assert.deepEqual(mergeState(defaults, saved), { ...defaults, ...saved });
+});

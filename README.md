@@ -41,8 +41,8 @@ Die Unit-Tests decken Normalrechnung, laufende Kosten, aktuelle Grunderwerbsteue
 
 ## Rechenmodell
 
-- Der Kaufpreis wird vollständig finanziert.
-- Kaufnebenkosten werden als eingesetztes Eigenkapital behandelt.
+- Der Darlehensbetrag entspricht dem Kaufpreis abzüglich des gewählten Eigenkapitalanteils (Standard 0 %).
+- Das eingesetzte Eigenkapital umfasst Kaufnebenkosten plus Eigenkapital im Kaufpreis.
 - Instandhaltung, Verwaltung und Rücklage werden vor Cashflow und Cash-on-Cash-Rendite abgezogen.
 - Die Rückwärtsrechnung verwendet dieselben Kosten- und Finanzierungsannahmen wie die Normalrechnung.
 - Die hinterlegten Grunderwerbsteuersätze entsprechen dem Stand 2026 und sollten bei gesetzlichen Änderungen aktualisiert werden.
@@ -69,7 +69,7 @@ Weitere Details stehen in [docs/product-boundaries.md](docs/product-boundaries.m
 - Referenz: 350.000 € Kaufpreis, 21.900 € Jahresmiete und die Beispielkosten ergeben −1.526 €/Jahr vor Mietausfall beziehungsweise −1.964 €/Jahr bei 2 % Mietausfall.
 - Stand der Prüfungen: 23 Node-Tests und TypeScript-Prüfung erfolgreich. ESLint und Produktionsbuild können wegen fehlender Abhängigkeiten noch nicht starten (`@eslint-community/eslint-utils`, `@swc/helpers`); der npm-Zugriff ist aus dieser Arbeitsumgebung nicht erreichbar. Die Aufgaben D1, A1 und A2 werden auf einem separaten Review-Branch geführt. Vollständige Prüfungen erfolgen über GitHub Actions. Browserprüfung und Produktionsveröffentlichung stehen aus.
 
-A5 bis F3 sind noch nicht umgesetzt (ausgenommen D1).
+A6 bis F3 sind noch nicht umgesetzt (ausgenommen D1).
 
 ## Automatische Prüfungen (D1)
 
@@ -88,3 +88,15 @@ Miet- und Kostenänderungen akzeptieren −50 % bis +100 %, einschließlich nega
 Die Textfelder erhalten Zwischenstände wie ein einzelnes Minuszeichen und deutsche Dezimalkommas während der Eingabe; beim Verlassen wird der begrenzte Wert formatiert. Der Mietregler unterstützt denselben Bereich. Gespeicherte negative Miet- und Kostenänderungen bleiben beim erneuten Laden erhalten. Die Basisrechnung bleibt unverändert.
 
 A4 erweitert die fachliche Eingabegrenze aus A3: Negative Kostenänderungen sind nun gültig und werden nicht mehr als ungültige Werte auf 0 gesetzt. Die bisherigen Tests wurden ausschließlich für diese Änderung angepasst. 34 Unit-Tests und TypeScript lokal erfolgreich; Lint und Produktionsbuild werden über GitHub Actions geprüft.
+
+### A5 – Eigenkapital und Finanzierungsstruktur
+
+`equityPercentOfPrice` (0–100 %, Default 0) beschreibt Eigenkapital im Kaufpreis zusätzlich zu den aus Eigenkapital bezahlten Kaufnebenkosten. `financing.principal` ist der verbleibende Darlehensbetrag. Zins, Tilgung, Annuität und Mietdeckung verwenden diesen Betrag. `totalEquityRequired` enthält das gesamte eingesetzte Eigenkapital und bildet die Basis der Cash-on-Cash-Rendite. `acquisitionCosts.equityRequired` bleibt als kompatible Angabe ausschließlich für die Kaufnebenkosten erhalten.
+
+Beide Rechner speichern den Eigenkapitalanteil und die optionale Zinsbindung (`fixedInterestYears`, 1–30 volle Jahre, ohne Angabe `null` im Rechenmodell). Alte Objekte erhalten 0 % Eigenkapital und keine Zinsbindung. Die Zinsbindung verändert die Erstjahresrechnung nicht; Restschuld und Mehrjahresentwicklung folgen mit A6. Die Übernahme aus dem Standardrechner synchronisiert auch die neuen Felder.
+
+Die Rückwärtsrechnung verwendet den finanzierten Kaufpreisanteil. Ohne Darlehensrate gibt es bei ausreichendem Mietertrag keine endliche, allein aus dem Cashflow ableitbare Kaufpreisgrenze (`priceLimitStatus: unbounded`). Die Oberfläche zeigt das ausdrücklich. Bei nicht gedeckten laufenden Kosten gilt `unaffordable`. In beiden Fällen ist `maxPurchasePrice: 0` lediglich ein numerischer Platzhalter für bestehende API-Verbraucher und keine Kaufpreisempfehlung. Die Prüfung eines konkreten Angebotspreises weist weiterhin Darlehen und gesamten Eigenkapitalbedarf aus. Das Modell enthält keine Obergrenze des verfügbaren Eigenkapitalbudgets.
+
+Beispiel ohne Mietausfall: Bei 350.000 € Kaufpreis und 20 % Eigenkapital entfallen 70.000 € auf den Kaufpreis, das Darlehen beträgt 280.000 € und das gesamte Eigenkapital inklusive 42.245 € Kaufnebenkosten beträgt 112.245 €.
+
+Validierung: 43 Unit-Tests einschließlich 0/20/100 % Eigenkapital, unveränderter Ergebnisse beim Standardwert 0 %, Standard-/Rückwärts-Gegenrechnungen und Speicherung älterer Objekte. TypeScript lokal erfolgreich; vollständige Prüfungen erfolgen über GitHub Actions.

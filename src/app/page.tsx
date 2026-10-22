@@ -1,7 +1,25 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect, useId, useRef } from "react";
+import { calculateProjection, DEFAULT_PROJECTION_SETTINGS, readProjectionSettings } from "@/lib/projection";
+import { createPremiumAnalysisEnvelope } from "@/domain/immocalc/premium";
+import { useEntitlement } from "@/hooks/useEntitlement";
+import { canCreatePremiumProject, hasPremiumAccess } from "@/domain/immocalc/premium";
+import { EquityFields, DebtRateFields } from "@/components/immocalc/FinancingFields";
+import { emptyCalcState, emptyRevState, parseSavedObjectRow, type CalcState, type ReverseState, type SavedObject } from '@/domain/immocalc/state';
+import { InfoTooltip, CollapsibleSection } from '@/components/immocalc/CalculatorSections';
+import { useCalculatorState } from '@/hooks/useCalculatorState';
+import { useSavedObjects } from '@/hooks/useSavedObjects';
+import { OcrReviewDialog } from '@/components/immocalc/OcrReviewDialog';
+import { saveObjectVersioned, ObjectSaveConflict } from "@/lib/saveObject";
+import { extractOcrFields } from "@/lib/ocr";
+import { parseNumber, formatAcc } from "@/lib/numberFormat";
+import { AppDialog } from "@/components/immocalc/AppDialog";
+import { useAppDialog } from "@/hooks/useAppDialog";
+import { validateFields } from "@/lib/validation";
+import { ModelNotice } from "@/components/immocalc/ModelNotice";
+import { ProjectionPanel } from "@/components/immocalc/ProjectionPanel";
+import { useState, useEffect, useRef } from "react";
 import { ActivePropertyBar } from '@/components/immocalc/ActivePropertyBar';
 import { CalculatorModeTabs, type CalculatorMode } from '@/components/immocalc/CalculatorModeTabs';
 import { PremiumAccessPanel } from '@/components/immocalc/PremiumAccessPanel';
@@ -12,299 +30,28 @@ import {
   calculateReverse,
   calculateStandard,
   LAND_TRANSFER_TAX_RATES_2026,
+  type ReverseCaseResult,
 } from '@/lib/calculations';
 import { supabase } from '@/lib/supabase';
+import { normalizeScenarioPercent, SCENARIO_PERCENT_MIN, SCENARIO_PERCENT_MAX } from '@/lib/scenario';
+import { SAVED_OBJECT_SCHEMA_VERSION } from '@/lib/savedState';
 
-// Interface for saved objects
-interface SavedObject {
-  id: string;
-  db_id?: string;
-  date: string;
-  calc: CalcState;
-  rev: ReverseState;
-  mieten: string[];
-  rentIncrease: number;
-}
-
-// Helper für Zahlen-Parsing und Formatierung
-const parseNumber = (val: string | number) => {
-  if (typeof val === "number") return Number.isFinite(val) ? val : 0;
-  if (!val) return 0;
-
-  const normalized = val
-    .trim()
-    .replace(/[\s\u00a0€%]/g, "")
-    .replace(/[^\d,.-]/g, "");
-
-  if (!normalized || !/^-?[\d.,]+$/.test(normalized)) return 0;
-
-  const lastComma = normalized.lastIndexOf(",");
-  const lastDot = normalized.lastIndexOf(".");
-  let cleaned = normalized;
-
-  if (lastComma >= 0 && lastDot >= 0) {
-    const decimalSeparator = lastComma > lastDot ? "," : ".";
-    const thousandsSeparator = decimalSeparator === "," ? "." : ",";
-    cleaned = normalized.split(thousandsSeparator).join("");
-    cleaned = cleaned.replace(decimalSeparator, ".");
-  } else if (lastComma >= 0) {
-    cleaned = normalized.replace(/\./g, "").replace(",", ".");
-  } else if (lastDot >= 0) {
-    const dotCount = (normalized.match(/\./g) || []).length;
-    const digitsAfterDot = normalized.length - lastDot - 1;
-    const digitsBeforeDot = normalized.replace("-", "").slice(0, lastDot).length;
-    const looksLikeGermanThousands = dotCount > 1 || (digitsAfterDot === 3 && digitsBeforeDot > 1);
-    cleaned = looksLikeGermanThousands ? normalized.replace(/\./g, "") : normalized;
-  }
-
-  const parsed = Number(cleaned);
-  return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const formatAcc = (val: number) => {
-  if (isNaN(val) || !isFinite(val)) return "0,00";
-  return val.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
-
-// Interface for standard calculation
-interface CalcState {
-  objektname: string;
-  anzahlEinheiten: string;
-  kaufpreis: string;
-  bundesland: string;
-  notarProzent: string;
-  hasMakler: boolean;
-  maklerProzent: string;
-  zins: string;
-  tilgung: string;
-  mietePM: string;
-  mietePA: string;
-  wohnflaeche: string;
-  baujahr: string;
-  instandhaltungQm: string;
-  verwaltungPm: string;
-  ruecklagePm: string;
-}
-
-// Interface for reverse calculation
-interface ReverseState {
-  wohnflaeche: string;
-  angebotspreis: string;
-  bundesland: string;
-  notarProzent: string;
-  hasMakler: boolean;
-  maklerProzent: string;
-  zins: string;
-  tilgung: string;
-  zielMietePA: string;
-  zielMietpreisQm: string; // NEU
-  instandhaltungQm: string;
-  verwaltungPm: string;
-  ruecklagePm: string;
-}
-
-// Info-Tooltip Komponente
-const InfoTooltip = ({ id, title, text, activeId, onToggle }: { id: string, title: string, text: string | React.ReactNode, activeId: string | null, onToggle: (id: string) => void }) => {
-  const isActive = activeId === id;
-  return (
-    <button
-      type="button"
-      className="tooltip-container tooltip-trigger"
-      onClick={(e) => { e.stopPropagation(); onToggle(id); }}
-      aria-expanded={isActive}
-      aria-controls={`${id}-tooltip`}
-      aria-label={`${title}: Erklärung anzeigen`}
-    >
-      <svg className="tooltip-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10"></circle>
-        <line x1="12" y1="16" x2="12" y2="12"></line>
-        <line x1="12" y1="8" x2="12.01" y2="8"></line>
-      </svg>
-      <span id={`${id}-tooltip`} role="tooltip" className={`tooltip-text ${isActive ? 'is-active' : ''}`}>
-        <strong>{title}</strong><br /><br />
-        {text}
-      </span>
-    </button>
-  );
-};
-
-// Wiederverwendbare klappbare Sektion
-const CollapsibleSection = ({ title, icon, children, defaultOpen = true, badge }: {
-  title: string, icon: React.ReactNode, children: React.ReactNode, defaultOpen?: boolean, badge?: string | number
-}) => {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-  const contentId = useId();
-  return (
-    <div style={{ marginBottom: isOpen ? 0 : '-0.5rem' }}>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        aria-expanded={isOpen}
-        aria-controls={contentId}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', gap: '0.5rem',
-          padding: '0.6rem 1rem',
-          background: isOpen ? 'var(--glass-bg)' : 'var(--glass-bg)',
-          border: `1px solid ${isOpen ? 'var(--accent-color)' : 'var(--glass-border)'}`,
-          borderRadius: isOpen ? '16px 16px 0 0' : '16px',
-          cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600,
-          color: isOpen ? 'var(--accent-color)' : 'var(--text-main)',
-          transition: 'all 0.25s ease',
-          backdropFilter: 'blur(12px)'
-        }}
-      >
-        {icon}
-        <span style={{ flex: 1, textAlign: 'left' }}>{title}</span>
-        {badge && !isOpen && (
-          <span style={{
-            background: 'var(--accent-color)', color: '#fff', borderRadius: '999px',
-            padding: '0.1rem 0.5rem', fontSize: '0.7rem', fontWeight: 700
-          }}>{badge}</span>
-        )}
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-          style={{ transition: 'transform 0.25s', transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
-          <polyline points="6 9 12 15 18 9"></polyline>
-        </svg>
-      </button>
-      {isOpen && (
-        <div id={contentId} style={{
-          border: '1px solid var(--accent-color)', borderTop: 'none',
-          borderRadius: '0 0 16px 16px', overflow: 'hidden',
-          animation: 'fadeIn 0.2s ease-out'
-        }}>
-          {children}
-        </div>
-      )}
-    </div>
-  );
-};
-
-const initialCalcState: CalcState = {
-  objektname: "Musterstraße 1",
-  anzahlEinheiten: "3",
-  kaufpreis: "350.000,00",
-  bundesland: "NRW",
-  notarProzent: "2,00",
-  hasMakler: true,
-  maklerProzent: "3,57",
-  zins: "4,00",
-  tilgung: "1,50",
-  mietePM: "1.825,00",
-  mietePA: "21.900,00",
-  wohnflaeche: "268,00",
-  baujahr: "1980",
-  instandhaltungQm: "0,00",
-  verwaltungPm: "0,00",
-  ruecklagePm: "0,00"
-};
-
-const initialRevState: ReverseState = {
-  wohnflaeche: "268,00",
-  angebotspreis: "350.000,00",
-  bundesland: "NRW",
-  notarProzent: "2,00",
-  hasMakler: true,
-  maklerProzent: "3,57",
-  zins: "4,00",
-  tilgung: "1,50",
-  zielMietePA: "32.160,00",
-  zielMietpreisQm: "10,00",
-  instandhaltungQm: "1,00",
-  verwaltungPm: "30,00",
-  ruecklagePm: "50,00"
-};
-
-const emptyCalcState: CalcState = {
-  objektname: "",
-  anzahlEinheiten: "",
-  kaufpreis: "",
-  bundesland: "NRW",
-  notarProzent: "",
-  hasMakler: false,
-  maklerProzent: "",
-  zins: "",
-  tilgung: "",
-  mietePM: "",
-  mietePA: "",
-  wohnflaeche: "",
-  baujahr: "",
-  instandhaltungQm: "",
-  verwaltungPm: "",
-  ruecklagePm: ""
-};
-
-const emptyRevState: ReverseState = {
-  wohnflaeche: "",
-  angebotspreis: "",
-  bundesland: "NRW",
-  notarProzent: "",
-  hasMakler: false,
-  maklerProzent: "",
-  zins: "",
-  tilgung: "",
-  zielMietePA: "",
-  zielMietpreisQm: "",
-  instandhaltungQm: "",
-  verwaltungPm: "",
-  ruecklagePm: ""
-};
-
-const SAVED_OBJECT_SCHEMA_VERSION = 2;
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-function mergeState<T extends object>(defaults: T, value: unknown): T {
-  if (!isRecord(value)) return defaults;
-
-  return Object.fromEntries(
-    Object.entries(defaults as Record<string, unknown>).map(([key, fallback]) => {
-      const candidate = value[key];
-      return [key, typeof candidate === typeof fallback ? candidate : fallback];
-    }),
-  ) as T;
-}
-
-function parseSavedObjectRow(row: unknown): SavedObject | null {
-  if (!isRecord(row) || typeof row.id !== "string" || !isRecord(row.calc_data)) return null;
-
-  const payload = row.calc_data;
-  const createdAt = typeof row.created_at === "string" ? new Date(row.created_at) : new Date();
-  const parsedRentIncrease = typeof payload.rentIncrease === "number" && Number.isFinite(payload.rentIncrease)
-    ? Math.min(Math.max(payload.rentIncrease, 0), 50)
-    : 0;
-
-  const parsedCalc = mergeState(initialCalcState, payload.calc);
-  const parsedRev = mergeState(initialRevState, payload.rev);
-  if (!isRecord(payload.rev) || typeof payload.rev.wohnflaeche !== "string") {
-    parsedRev.wohnflaeche = parsedCalc.wohnflaeche;
-  }
-  if (!isRecord(payload.rev) || typeof payload.rev.angebotspreis !== "string") {
-    parsedRev.angebotspreis = parsedCalc.kaufpreis;
-  }
-
-  return {
-    id: row.id,
-    db_id: row.id,
-    date: Number.isNaN(createdAt.getTime())
-      ? new Date().toISOString().split("T")[0]
-      : createdAt.toISOString().split("T")[0],
-    calc: parsedCalc,
-    rev: parsedRev,
-    mieten: Array.isArray(payload.mieten)
-      ? payload.mieten.filter((entry): entry is string => typeof entry === "string").slice(0, 10)
-      : [""],
-    rentIncrease: parsedRentIncrease,
-  };
+function describePriceLimit(result: ReverseCaseResult): string {
+  if (result.priceLimitStatus === "unbounded") return "Keine Kaufpreisgrenze ableitbar";
+  if (result.priceLimitStatus === "unaffordable") return "Ziel mit den Eingaben nicht erreichbar";
+  return `${formatAcc(result.maxPurchasePrice)} €`;
 }
 
 export default function Home() {
+  const { request: dialogRequest, close: closeDialog, ask, notify, confirmAction, promptValue } = useAppDialog();
   // === STANDARD KALKULATION STATE ===
-  const [calc, setCalc] = useState<CalcState>(initialCalcState);
-  const [rev, setRev] = useState<ReverseState>(initialRevState);
+  const {premiumSettings,setPremiumSettings,calc,setCalc,rev,setRev,mieten,setMieten,rentIncreaseInput,setRentIncreaseInput,scenarioCostInput,setScenarioCostInput} = useCalculatorState();
 
+  const calcIssues = validateFields({...calc, maklerProzent:calc.hasMakler?calc.maklerProzent:'0'}, parseNumber);
+  const revIssues = validateFields({...rev, maklerProzent:rev.hasMakler?rev.maklerProzent:'0'}, parseNumber);
   const { user, signOut } = useAuth();
-  const [mieten, setMieten] = useState<string[]>([""]);
-  const [savedObjects, setSavedObjects] = useState<SavedObject[]>([]);
+  const entitlement=useEntitlement(user?.id,supabase);
+  const {savedObjects,setSavedObjects,loadError} = useSavedObjects(user?.id, supabase);
   const [isSavedObjectsOpen, setIsSavedObjectsOpen] = useState(false);
   const [isObjektInfoOpen, setIsObjektInfoOpen] = useState(false);
   const [isMietenRechnerOpen, setIsMietenRechnerOpen] = useState(false);
@@ -319,8 +66,8 @@ export default function Home() {
   const [syncedFields, setSyncedFields] = useState<Record<string, boolean>>({}); // NEU: Tracking synchronisierter Felder
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scanButtonRef = useRef<HTMLButtonElement>(null);
-  const scanDialogRef = useRef<HTMLDivElement>(null);
   const hasManualFederalStateChangeRef = useRef(false);
+  const [locationSuggestion, setLocationSuggestion] = useState<string | null>(null);
 
   // UX-Hilfen für Einheiten-Rechner
   const mietenRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -333,15 +80,18 @@ export default function Home() {
 
   // Tab State
   const [activeTab, setActiveTab] = useState<CalculatorMode>('standard');
+  const criticalInputError = activeTab === 'reverse' ? Boolean(revIssues.wohnflaeche) : Boolean(calcIssues.wohnflaeche || calcIssues.kaufpreis);
   const [selectedPremiumPlan, setSelectedPremiumPlan] = useState<PremiumPlanId>('investor');
   const [premiumNotice, setPremiumNotice] = useState<string | null>(null);
   const quickRentPotential = parseNumber(calc.wohnflaeche) * parseNumber(rev.zielMietpreisQm);
 
-  const activePropertyIsSaved = savedObjects.some((object) => (
-    object.calc.objektname.trim() === calc.objektname.trim()
-    && parseNumber(object.calc.wohnflaeche) === parseNumber(calc.wohnflaeche)
-    && parseNumber(object.calc.kaufpreis) === parseNumber(calc.kaufpreis)
-  ));
+  const activePropertyIsSaved = savedObjects.some(object =>
+    JSON.stringify(object.calc)===JSON.stringify(calc) && JSON.stringify(object.rev)===JSON.stringify(rev)
+    && JSON.stringify(object.mieten)===JSON.stringify(mieten)
+    && object.rentIncrease===normalizeScenarioPercent(parseNumber(rentIncreaseInput))
+    && object.scenarioCostIncreasePercent===normalizeScenarioPercent(parseNumber(scenarioCostInput))
+    && JSON.stringify(object.premiumSettings)===JSON.stringify(premiumSettings)
+  );
 
 
   useEffect(() => {
@@ -360,31 +110,6 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
-    const loadFromSupabase = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('immocalc_saved_objects')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-
-        if (error) {
-          throw error;
-        }
-
-        const loadedObjects = (data || [])
-          .map(parseSavedObjectRow)
-          .filter((entry): entry is SavedObject => entry !== null);
-        setSavedObjects(loadedObjects);
-      } catch (e) {
-        console.error("Failed to load saved objects", e);
-      }
-    };
-    loadFromSupabase();
-  }, [user]);
-
-  useEffect(() => {
     let isActive = true;
 
     const applyLocationDefault = async () => {
@@ -396,8 +121,7 @@ export default function Home() {
         const federalState = data.federalState;
         if (!isActive || hasManualFederalStateChangeRef.current || !federalState) return;
 
-        setCalc(prev => ({ ...prev, bundesland: federalState }));
-        setRev(prev => ({ ...prev, bundesland: federalState }));
+        setLocationSuggestion(federalState);
       } catch {
         // Ohne Geo-Header bleibt die sichere Standardauswahl NRW bestehen.
       }
@@ -433,26 +157,6 @@ export default function Home() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isMietenRechnerOpen, activeTooltip]);
-
-  useEffect(() => {
-    if (!scanResult) return;
-
-    const previouslyFocused = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : scanButtonRef.current;
-    scanDialogRef.current?.focus();
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setScanResult(null);
-    };
-    document.addEventListener("keydown", handleEscape);
-
-    return () => {
-      document.removeEventListener("keydown", handleEscape);
-      previouslyFocused?.focus();
-    };
-  }, [scanResult]);
-
 
   // Helper zum Aktualisieren des States (Standard & Synchronisation nach unten)
   const updateCalc = (field: keyof CalcState, value: string | boolean) => {
@@ -570,7 +274,7 @@ export default function Home() {
     const rawVal = calc[field];
     if (typeof rawVal === "string") {
       const val = parseNumber(rawVal);
-      updateCalc(field, formatAcc(Math.max(val, 0)));
+      if (!calcIssues[field]) updateCalc(field, formatAcc(val));
     }
   };
 
@@ -586,12 +290,12 @@ export default function Home() {
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      alert("Bitte wähle eine Bilddatei aus.");
+      void notify("Bitte wähle eine Bilddatei aus.");
       return;
     }
 
     if (file.size > 12 * 1024 * 1024) {
-      alert("Das Bild ist größer als 12 MB. Bitte verkleinere es vor dem Scan.");
+      void notify("Das Bild ist größer als 12 MB. Bitte verkleinere es vor dem Scan.");
       return;
     }
 
@@ -599,13 +303,13 @@ export default function Home() {
     let worker: Awaited<ReturnType<(typeof import("tesseract.js"))["createWorker"]>> | null = null;
     try {
       const { createWorker } = await import("tesseract.js");
-      worker = await createWorker('deu');
+      worker = await createWorker('deu', 1, {workerPath:'/ocr/worker.min.js',corePath:'/ocr/core',langPath:'/ocr/lang',workerBlobURL:false});
       const { data: { text } } = await worker.recognize(file);
 
       processOcrText(text);
     } catch (error) {
       console.error("OCR Error:", error);
-      alert("Fehler bei der Texterkennung. Bitte versuche es mit einem klareren Bild.");
+      void notify("Fehler bei der Texterkennung. Bitte versuche es mit einem klareren Bild.");
     } finally {
       if (worker) await worker.terminate();
       setIsScanning(false);
@@ -614,33 +318,12 @@ export default function Home() {
   };
 
   const processOcrText = (text: string) => {
-    // Einfache Heuristiken für Immobilien-Daten
-    const results: Record<string, string> = {};
-
-    // Kaufpreis-Suche (nach € oder EUR, oft fünf- bis siebenstellig)
-    const priceMatch = text.match(/(?:Kaufpreis|Preis|Festpreis)[:\s]*([\d\.,]+)\s*(?:€|EUR)/i) ||
-      text.match(/([\d\.]{5,})\s*€/);
-    if (priceMatch) results.kaufpreis = priceMatch[1].trim();
-
-    // Wohnfläche (m2 oder qm)
-    const areaMatch = text.match(/([\d\.,]+)\s*(?:m[²2]|qm)/i) ||
-      text.match(/(?:Wohnfläche)[:\s]*([\d\.,]+)/i);
-    if (areaMatch) results.wohnflaeche = areaMatch[1].trim();
-
-    // Kaltmiete
-    const rentMatch = text.match(/(?:Kaltmiete|Miete)[:\s]*([\d\.,]+)\s*€/i) ||
-      text.match(/(?:Einnahmen)[:\s]*([\d\.,]+)\s*€/i);
-    if (rentMatch) results.mietePM = rentMatch[1].trim();
-
-    // Baujahr (vierstellig, 18xx, 19xx, 20xx)
-    const yearMatch = text.match(/(?:Baujahr|Bauw\.)[:\s]*(\d{4})/i) ||
-      text.match(/\b(?:18|19|20)\d{2}\b/);
-    if (yearMatch) results.baujahr = yearMatch[1] || yearMatch[0];
+    const results = extractOcrFields(text);
 
     if (Object.keys(results).length > 0) {
       setScanResult(results);
     } else {
-      alert("Es konnten keine eindeutigen Daten erkannt werden. Bitte stelle sicher, dass Kaufpreis, Fläche oder Miete im Text sichtbar sind.");
+      void notify("Es konnten keine eindeutigen Daten erkannt werden. Bitte stelle sicher, dass Kaufpreis, Fläche oder Miete im Text sichtbar sind.");
     }
   };
 
@@ -659,24 +342,33 @@ export default function Home() {
   const mietePA = parseNumber(calc.mietePA) || 0;
   const zins = parseNumber(calc.zins) || 0;
   const tilgung = parseNumber(calc.tilgung) || 0;
-  const [rentIncrease, setRentIncrease] = useState<number>(0);
+  // Preserve intermediate edits such as "-" so negative values can be typed naturally.
+
+  const rentIncrease = normalizeScenarioPercent(parseNumber(rentIncreaseInput));
+  const scenarioCostIncreasePercent = normalizeScenarioPercent(parseNumber(scenarioCostInput));
+  const isScenarioActive = rentIncrease !== 0 || scenarioCostIncreasePercent !== 0;
   const grunderwerbsteuer: Record<string, number> = LAND_TRANSFER_TAX_RATES_2026;
   const standardResult = calculateStandard({
     federalState: calc.bundesland,
     notaryPercent: parseNumber(calc.notarProzent),
+    movableItemsAmount: parseNumber(calc.movableItemsAmount),
     brokerPercent: parseNumber(calc.maklerProzent),
     hasBroker: calc.hasMakler,
     purchasePrice: kaufpreis,
     annualRent: mietePA,
+    vacancyPercent: parseNumber(calc.vacancyPercent),
     livingArea: wohnflaeche,
     maintenancePerSqmMonthly: parseNumber(calc.instandhaltungQm),
     managementMonthly: parseNumber(calc.verwaltungPm),
     reserveMonthly: parseNumber(calc.ruecklagePm),
     interestPercent: zins,
     repaymentPercent: tilgung,
+    equityPercentOfPrice: parseNumber(calc.equityPercentOfPrice),
+    fixedInterestYears: calc.fixedInterestYears ? parseNumber(calc.fixedInterestYears) : undefined,
     scenarioRentIncreasePercent: rentIncrease,
+    scenarioCostIncreasePercent,
   });
-  const standardCase = rentIncrease > 0 ? standardResult.scenario : standardResult.base;
+  const standardCase = isScenarioActive ? standardResult.scenario : standardResult.base;
 
   const gesamtNkProzent = standardResult.acquisitionCosts.totalPercent;
   const maklerEuro = standardResult.acquisitionCosts.brokerAmount;
@@ -694,7 +386,7 @@ export default function Home() {
   const nettoRendite = standardCase.netRentalYieldPercent;
   const kaufpreisFaktor = standardCase.purchasePriceFactor;
   const roe = standardCase.returnOnEquityPercent;
-  const laufendeKostenPM = standardResult.operatingCosts.totalMonthly;
+  const laufendeKostenPM = (isScenarioActive ? standardResult.scenarioOperatingCosts : standardResult.operatingCosts).totalMonthly;
 
   const kostenAnteil = standardCase.chart.operatingCosts.percentOfRent;
   const zinsAnteil = standardCase.chart.interest.percentOfRent;
@@ -737,16 +429,20 @@ export default function Home() {
     const rawVal = rev[field];
     if (typeof rawVal === "string") {
       const val = parseNumber(rawVal);
-      updateRev(field, formatAcc(Math.max(val, 0)));
+      if (!revIssues[field]) updateRev(field, formatAcc(val));
     }
   };
 
   const reverseResult = calculateReverse({
     federalState: rev.bundesland,
     notaryPercent: parseNumber(rev.notarProzent),
+    movableItemsAmount: parseNumber(rev.movableItemsAmount),
     brokerPercent: parseNumber(rev.maklerProzent),
     hasBroker: rev.hasMakler,
     targetAnnualRent: parseNumber(rev.zielMietePA),
+    targetCashFlowAnnual: 0,
+    targetNetYieldPercent: undefined,
+    vacancyPercent: parseNumber(rev.vacancyPercent),
     offeredPurchasePrice: parseNumber(calc.kaufpreis),
     livingArea: parseNumber(calc.wohnflaeche),
     maintenancePerSqmMonthly: parseNumber(rev.instandhaltungQm),
@@ -754,14 +450,19 @@ export default function Home() {
     reserveMonthly: parseNumber(rev.ruecklagePm),
     interestPercent: parseNumber(rev.zins),
     repaymentPercent: parseNumber(rev.tilgung),
+    equityPercentOfPrice: parseNumber(rev.equityPercentOfPrice),
+    fixedInterestYears: rev.fixedInterestYears ? parseNumber(rev.fixedInterestYears) : undefined,
     scenarioRentIncreasePercent: rentIncrease,
+    scenarioCostIncreasePercent,
   });
+  const premiumReverseResult=calculateReverse({...reverseResult.input,fixedInterestYears:reverseResult.input.fixedInterestYears??undefined,targetCashFlowAnnual:rev.targetMode==='yield'?0:parseNumber(rev.targetCashFlowAnnual),targetNetYieldPercent:rev.targetMode==='yield'?parseNumber(rev.targetNetYieldPercent):undefined});
+  const buildPremiumAnalysis=()=>hasPremiumAccess(entitlement.level)?{...createPremiumAnalysisEnvelope({projection:standardResult.input,settings:premiumSettings,target:premiumReverseResult.input}),result:{projection:calculateProjection({...standardResult.input,...premiumSettings},premiumSettings.years),target:premiumReverseResult}}:undefined;
   const revGesamtNkProzent = reverseResult.base.acquisitionCosts.totalPercent;
-  const revKaufpreis = reverseResult.base.maxPurchasePrice;
+  const revPriceHasLimit = reverseResult.base.priceLimitStatus === "bounded";
   const revMaxGesamtKaufpreis = reverseResult.base.totalInvestment;
   const revNkEuro = reverseResult.base.acquisitionCosts.totalAmount;
   const revMaklerEuro = reverseResult.base.acquisitionCosts.brokerAmount;
-  const revKaufpreisNeu = reverseResult.scenario.maxPurchasePrice;
+
   const revLaufendeKostenPA = reverseResult.operatingCosts.totalAnnual;
   const revAngebot = reverseResult.offerAnalysis;
 
@@ -774,13 +475,17 @@ export default function Home() {
       ...prev,
       bundesland: calc.bundesland,
       notarProzent: calc.notarProzent,
+      movableItemsAmount: calc.movableItemsAmount,
       hasMakler: calc.hasMakler,
       maklerProzent: calc.maklerProzent,
       zins: calc.zins,
       tilgung: calc.tilgung,
+      equityPercentOfPrice: calc.equityPercentOfPrice,
+      fixedInterestYears: calc.fixedInterestYears,
       instandhaltungQm: calc.instandhaltungQm,
       verwaltungPm: calc.verwaltungPm,
       ruecklagePm: calc.ruecklagePm,
+      vacancyPercent: calc.vacancyPercent,
       wohnflaeche: calc.wohnflaeche,
       angebotspreis: calc.kaufpreis,
       zielMietePA: calc.mietePA,
@@ -794,6 +499,9 @@ export default function Home() {
       maklerProzent: true,
       zins: true,
       tilgung: true,
+      equityPercentOfPrice: true,
+      fixedInterestYears: true,
+      vacancyPercent: true,
       instandhaltungQm: true,
       verwaltungPm: true,
       ruecklagePm: true,
@@ -818,7 +526,7 @@ export default function Home() {
   const handleSaveObject = async () => {
     if (isSaving) return;
     if (!user) {
-      alert("Du musst eingeloggt sein, um Objekte speichern zu können.");
+      void notify("Du musst eingeloggt sein, um Objekte speichern zu können.");
       return;
     }
     
@@ -832,15 +540,16 @@ export default function Home() {
 
     // Prüfen, ob Objekt mit diesem Namen bereits existiert
     const existingIndex = savedObjects.findIndex(o => o.calc.objektname.trim() === trimmedName);
+    if(existingIndex===-1&&!canCreatePremiumProject(entitlement.level,savedObjects.length)){void notify('Dein ImmoCalc-Tarif erlaubt kein weiteres Objekt. Investor: bis zu 3 Objekte; Professional: unbegrenzt.');return;}
     let nameToSave = trimmedName;
     let existingDbId: string | undefined = undefined;
 
     if (existingIndex !== -1) {
-      const wantOverwrite = window.confirm(`Ein Objekt mit dem Namen "${trimmedName}" existiert bereits.\n\nMöchtest du es überschreiben?\n(Klicke "Abbrechen", um eine Kopie unter neuem Namen zu speichern)`);
+      const wantOverwrite = await confirmAction(`Ein Objekt mit dem Namen "${trimmedName}" existiert bereits.\n\nMöchtest du es überschreiben?\n(Klicke "Abbrechen", um eine Kopie unter neuem Namen zu speichern)`);
       if (wantOverwrite) {
         existingDbId = savedObjects[existingIndex].db_id;
       } else {
-        const newName = window.prompt("Bitte gib einen neuen Namen für dieses Objekt ein:", trimmedName + " (Kopie)");
+        const newName = await promptValue("Bitte gib einen neuen Namen für dieses Objekt ein:", trimmedName + " (Kopie)");
         if (!newName || !newName.trim()) return;
         nameToSave = newName.trim();
         updateCalc("objektname", nameToSave);
@@ -857,28 +566,13 @@ export default function Home() {
           rev,
           mieten,
           rentIncrease,
+          scenarioCostIncreasePercent,
+          premiumSettings,
+          premiumAnalysis:buildPremiumAnalysis(),
         }
       };
 
-      if (existingDbId) {
-        const { error } = await supabase
-          .from('immocalc_saved_objects')
-          .update(payload)
-          .eq('id', existingDbId)
-          .eq('user_id', user.id);
-
-        if (error) {
-          throw error;
-        }
-      } else {
-        const { error } = await supabase
-          .from('immocalc_saved_objects')
-          .insert(payload);
-
-        if (error) {
-          throw error;
-        }
-      }
+      await saveObjectVersioned(supabase, payload, existingDbId ? {id:existingDbId,updatedAt:savedObjects[existingIndex].updatedAt} : undefined);
 
       const { data, error } = await supabase
         .from('immocalc_saved_objects')
@@ -899,8 +593,23 @@ export default function Home() {
       setIsSavedObjectsOpen(true);
       setIsObjektInfoOpen(false);
     } catch (e) {
+      if (e instanceof ObjectSaveConflict) {
+        const choice=await ask({kind:'confirm',message:'Das gespeicherte Objekt wurde zwischenzeitlich geändert. Wie möchtest du fortfahren?',choices:[{label:'Neu laden',value:'reload'},{label:'Als Kopie speichern',value:'copy'}]});
+        try {
+          if(choice==='reload'&&existingDbId){
+            const {data,error}=await supabase.from('immocalc_saved_objects').select('*').eq('id',existingDbId).eq('user_id',user.id).single();
+            if(error)throw error;const loaded=parseSavedObjectRow(data);if(loaded){handleLoadObject(loaded);setSavedObjects(prev=>prev.map(o=>o.id===loaded.id?loaded:o));}
+          } else if(choice==='copy'){
+            const copyName=nameToSave+' (Kopie)';
+            const saved=await saveObjectVersioned(supabase,{user_id:user.id,calc_data:{schemaVersion:SAVED_OBJECT_SCHEMA_VERSION,calc:{...calc,objektname:copyName},rev,mieten,rentIncrease,scenarioCostIncreasePercent,premiumSettings,premiumAnalysis:buildPremiumAnalysis()}});
+            setSavedObjects(prev=>[{id:saved.id,db_id:saved.id,updatedAt:saved.updated_at,date:new Date().toISOString().split('T')[0],calc:{...calc,objektname:copyName},rev,mieten,rentIncrease,scenarioCostIncreasePercent,premiumSettings},...prev]);
+            updateCalc('objektname',copyName);void notify('Die aktuellen Eingaben wurden als separates Objekt gespeichert.');
+          }
+        }catch{void notify('Die Konfliktlösung ist fehlgeschlagen. Deine aktuellen Eingaben bleiben erhalten.');}
+        return;
+      }
       console.error("Speichern fehlgeschlagen:", e);
-      alert("Das Objekt konnte nicht gespeichert werden. Bitte prüfe deine Verbindung und versuche es erneut.");
+      void notify("Das Objekt konnte nicht gespeichert werden. Bitte prüfe deine Verbindung und versuche es erneut.");
     } finally {
       setIsSaving(false);
     }
@@ -908,6 +617,7 @@ export default function Home() {
 
   const handleLoadObject = (obj: SavedObject) => {
     hasManualFederalStateChangeRef.current = true;
+    setPremiumSettings(readProjectionSettings(obj.premiumSettings));
     setCalc(obj.calc);
     setRev({
       ...(obj.rev || rev),
@@ -915,16 +625,19 @@ export default function Home() {
       angebotspreis: obj.calc.kaufpreis,
     });
     setMieten(obj.mieten || [""]);
-    setRentIncrease(obj.rentIncrease || 0);
+    setRentIncreaseInput(String(normalizeScenarioPercent(obj.rentIncrease)));
+    setScenarioCostInput(String(normalizeScenarioPercent(obj.scenarioCostIncreasePercent)));
   };
 
-  const handleClearData = () => {
-    if (window.confirm("Möchtest du wirklich alle eingegebenen Werte löschen?")) {
+  const handleClearData = async () => {
+    if (await confirmAction("Möchtest du wirklich alle eingegebenen Werte löschen?")) {
+      setPremiumSettings(DEFAULT_PROJECTION_SETTINGS);
       setCalc(emptyCalcState);
       setRev(emptyRevState);
       setSyncedFields({});
       setMieten([""]);
-      setRentIncrease(0);
+      setRentIncreaseInput("0");
+      setScenarioCostInput("0");
       setScanResult(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       setIsFlashActive(true);
@@ -935,7 +648,7 @@ export default function Home() {
   const handleDeleteObject = async (id: string) => {
     const obj = savedObjects.find(o => o.id === id);
     if (obj?.db_id && user) {
-      const shouldDelete = window.confirm(`Möchtest du „${obj.calc.objektname || "Unbenanntes Objekt"}“ wirklich löschen?`);
+      const shouldDelete = await confirmAction(`Möchtest du „${obj.calc.objektname || "Unbenanntes Objekt"}“ wirklich löschen?`);
       if (!shouldDelete) return;
 
       const { error } = await supabase
@@ -946,7 +659,7 @@ export default function Home() {
 
       if (error) {
         console.error("Löschen fehlgeschlagen:", error);
-        alert("Das Objekt konnte nicht gelöscht werden. Bitte versuche es erneut.");
+        void notify("Das Objekt konnte nicht gelöscht werden. Bitte versuche es erneut.");
         return;
       }
     }
@@ -955,6 +668,9 @@ export default function Home() {
 
   return (
     <div className="app-container">
+      {loadError && <p role="alert">{loadError}</p>}
+      {dialogRequest && <AppDialog request={dialogRequest} onClose={closeDialog} />}
+      {criticalInputError && <p role="alert" className="validation-message">Bitte korrigiere die markierten Pflichtfelder. Die Ergebnisanzeige ist bis dahin ausgeblendet.</p>}
       {/* ═══ TOP BAR — eigenständige ImmoCalc-App im gemeinsamen Designsystem ═══ */}
       <header className="app-topbar">
         <div className="app-brand">
@@ -1076,13 +792,15 @@ export default function Home() {
             <div className="input-group input-optional">
               <label htmlFor="unit-count">Anzahl Einheiten</label>
               <div className="input-wrapper">
-                <input id="unit-count" inputMode="numeric" type="text" value={calc.anzahlEinheiten} onChange={(e) => updateCalc("anzahlEinheiten", e.target.value)} placeholder="z.B. 3" onKeyDown={handleEnterKey} />
+                <input id="unit-count" inputMode="numeric" type="text" value={calc.anzahlEinheiten} onChange={(e) => updateCalc("anzahlEinheiten", e.target.value)} placeholder="z.B. 3" onKeyDown={handleEnterKey}  aria-invalid={Boolean(calcIssues.anzahlEinheiten)} />
+{calcIssues.anzahlEinheiten && <small role="alert" className="validation-message">{calcIssues.anzahlEinheiten}</small>}
               </div>
             </div>
             <div className="input-group input-optional">
               <label htmlFor="construction-year">Baujahr</label>
               <div className="input-wrapper">
-                <input id="construction-year" inputMode="numeric" type="text" value={calc.baujahr} onChange={(e) => updateCalc("baujahr", e.target.value)} onKeyDown={handleEnterKey} />
+                <input id="construction-year" inputMode="numeric" type="text" value={calc.baujahr} onChange={(e) => updateCalc("baujahr", e.target.value)} onKeyDown={handleEnterKey}  aria-invalid={Boolean(calcIssues.baujahr)} />
+{calcIssues.baujahr && <small role="alert" className="validation-message">{calcIssues.baujahr}</small>}
               </div>
             </div>
           </div>
@@ -1155,7 +873,14 @@ export default function Home() {
         }}
       />
 
+      {locationSuggestion && <div className="glass-panel" role="status">
+        <p>Dein erkannter Standort: {locationSuggestion}. Liegt auch dein Objekt dort?</p>
+        <button type="button" onClick={()=>{updateFederalState(locationSuggestion);setLocationSuggestion(null);}}>Für mein Objekt übernehmen</button>
+        <button type="button" onClick={()=>setLocationSuggestion(null)}>Verwerfen</button>
+      </div>}
       <ActivePropertyBar
+        canSave={!entitlement.loading && (savedObjects.some(o=>o.calc.objektname.trim()===calc.objektname.trim()) || canCreatePremiumProject(entitlement.level,savedObjects.length))}
+        errors={{livingArea:calcIssues.wohnflaeche,purchasePrice:calcIssues.kaufpreis}}
         objectName={calc.objektname}
         livingArea={calc.wohnflaeche}
         purchasePrice={calc.kaufpreis}
@@ -1172,8 +897,22 @@ export default function Home() {
         onSave={handleSaveObject}
       />
 
+      {(standardResult.acquisitionCosts.warnings.length > 0 || reverseResult.base.acquisitionCosts.warnings.length > 0) && <p role="alert" className="validation-message">Unbekanntes Bundesland: Bitte wähle den Objektstandort aus. Die Grunderwerbsteuer ist noch nicht zuverlässig berücksichtigt.</p>}
+      {!hasPremiumAccess(entitlement.level) && <p role="status">{entitlement.loading?'Tarifberechtigung wird geprüft …':entitlement.error?'Tarifberechtigung konnte nicht geprüft werden. Bitte prüfe die Einrichtung der ImmoCalc-Migration.':'Neue Objekte und Premium-Analysen benötigen eine freigeschaltete ImmoCalc-Berechtigung. Eine Buchung ist noch nicht verfügbar.'}</p>}
       {activeTab === 'premium' && (
-        <PremiumAccessPanel
+        hasPremiumAccess(entitlement.level) ? <section id="premium-panel" role="tabpanel" aria-labelledby="premium-tab">
+          <ModelNotice />
+          <ProjectionPanel input={standardResult.input} settings={premiumSettings} onChange={value=>setPremiumSettings(readProjectionSettings(value))}/>
+          <section className="glass-panel"><h2>Ziel-Rückwärtsrechnung vor Steuern</h2>
+                  <div className="calculation-row" aria-label="Ziel der Rückwärtsrechnung">
+                    <label>Zielart<select value={rev.targetMode} onChange={e=>updateRev('targetMode',e.target.value)}><option value="cashflow">Cashflow vor Steuern</option><option value="yield">Nettorendite vor Steuern</option></select></label>
+                    {rev.targetMode === 'yield' ? <label>Ziel-Nettorendite (%)<input type="text" inputMode="decimal" value={rev.targetNetYieldPercent} onChange={e=>updateRev('targetNetYieldPercent',e.target.value)} aria-invalid={Boolean(revIssues.targetNetYieldPercent)} />
+{revIssues.targetNetYieldPercent && <small role="alert" className="validation-message">{revIssues.targetNetYieldPercent}</small>}</label> : <label>Ziel-Cashflow pro Jahr (€)<input type="text" inputMode="decimal" value={rev.targetCashFlowAnnual} onChange={e=>updateRev('targetCashFlowAnnual',e.target.value)} aria-invalid={Boolean(revIssues.targetCashFlowAnnual)} />
+{revIssues.targetCashFlowAnnual && <small role="alert" className="validation-message">{revIssues.targetCashFlowAnnual}</small>}</label>}
+                  </div>
+          {rev.targetMode==='yield'&&parseNumber(rev.targetNetYieldPercent)<=0 ? <p role="alert">Bitte eine Zielrendite größer als 0 % eingeben.</p> : <p>{rev.targetMode==='yield'?'Kaufpreis bei Ziel-Nettorendite':'Kaufpreis bei Ziel-Cashflow'}: <strong>{describePriceLimit(premiumReverseResult.base)}</strong></p>}
+          <p>Speichern übernimmt die Einstellungen und eine versionierte Modellrechnung in dein Objekt.</p></section>
+        </section> : <PremiumAccessPanel
           selectedPlan={selectedPremiumPlan}
           notice={premiumNotice}
           onPlanChange={(plan) => {
@@ -1202,7 +941,8 @@ export default function Home() {
                   <div className="input-group input-required">
                     <label htmlFor="purchase-price">Kaufpreis</label>
                     <div className="input-wrapper">
-                      <input id="purchase-price" inputMode="decimal" type="text" value={calc.kaufpreis} onChange={(e) => updateCalc("kaufpreis", e.target.value)} onBlur={() => handleBlurCalc("kaufpreis")} onKeyDown={handleEnterKey} required aria-required="true" />
+                      <input id="purchase-price" inputMode="decimal" type="text" value={calc.kaufpreis} onChange={(e) => updateCalc("kaufpreis", e.target.value)} onBlur={() => handleBlurCalc("kaufpreis")} onKeyDown={handleEnterKey} required aria-required="true"  aria-invalid={Boolean(calcIssues.kaufpreis)} />
+{calcIssues.kaufpreis && <small role="alert" className="validation-message">{calcIssues.kaufpreis}</small>}
                       <span className="input-suffix">€</span>
                     </div>
                   </div>
@@ -1210,7 +950,8 @@ export default function Home() {
                   <div className="input-group input-required">
                     <label htmlFor="living-area">Wohnfläche</label>
                     <div className="input-wrapper">
-                      <input id="living-area" inputMode="decimal" type="text" value={calc.wohnflaeche} onChange={(e) => updateCalc("wohnflaeche", e.target.value)} onBlur={() => handleBlurCalc("wohnflaeche")} onKeyDown={handleEnterKey} required aria-required="true" />
+                      <input id="living-area" inputMode="decimal" type="text" value={calc.wohnflaeche} onChange={(e) => updateCalc("wohnflaeche", e.target.value)} onBlur={() => handleBlurCalc("wohnflaeche")} onKeyDown={handleEnterKey} required aria-required="true"  aria-invalid={Boolean(calcIssues.wohnflaeche)} />
+{calcIssues.wohnflaeche && <small role="alert" className="validation-message">{calcIssues.wohnflaeche}</small>}
                       <span className="input-suffix">m²</span>
                     </div>
                   </div>
@@ -1250,7 +991,7 @@ export default function Home() {
 
                 <div className="calculation-row">
                   <div className="input-group input-optional">
-                    <label htmlFor="notary-percent">Notar</label>
+                    <label htmlFor="notary-percent">Notar und Grundbuch</label>
                     <div className="input-wrapper">
                       <input
                         id="notary-percent"
@@ -1266,7 +1007,8 @@ export default function Home() {
                           background: isNotarLocked ? 'var(--bg-color)' : 'var(--input-optional-bg)'
                         }}
                         onKeyDown={handleEnterKey}
-                      />
+                       aria-invalid={Boolean(calcIssues.notarProzent)} />
+{calcIssues.notarProzent && <small role="alert" className="validation-message">{calcIssues.notarProzent}</small>}
                       <button
                         onClick={() => setIsNotarLocked(!isNotarLocked)}
                         style={{
@@ -1291,7 +1033,8 @@ export default function Home() {
                       Maklerprovision
                     </label>
                     <div className="input-wrapper" style={{ opacity: calc.hasMakler ? 1 : 0.5, pointerEvents: calc.hasMakler ? 'auto' : 'none' }}>
-                      <input id="broker-percent" aria-label="Maklerprovision in Prozent" inputMode="decimal" type="text" value={calc.maklerProzent} onChange={(e) => updateCalc("maklerProzent", e.target.value)} onBlur={() => handleBlurCalc("maklerProzent")} onKeyDown={handleEnterKey} />
+                      <input id="broker-percent" aria-label="Maklerprovision in Prozent" inputMode="decimal" type="text" value={calc.maklerProzent} onChange={(e) => updateCalc("maklerProzent", e.target.value)} onBlur={() => handleBlurCalc("maklerProzent")} onKeyDown={handleEnterKey}  aria-invalid={Boolean(calcIssues.maklerProzent)} />
+{calcIssues.maklerProzent && <small role="alert" className="validation-message">{calcIssues.maklerProzent}</small>}
                       <span className="input-suffix">%</span>
                     </div>
                   </div>
@@ -1321,7 +1064,8 @@ export default function Home() {
                         readOnly={isMietenRechnerOpen}
                         style={{ background: isMietenRechnerOpen ? 'var(--bg-color)' : '', opacity: isMietenRechnerOpen ? 0.7 : 1 }}
                         onKeyDown={handleEnterKey}
-                      />
+                       aria-invalid={Boolean(calcIssues.mietePM)} />
+{calcIssues.mietePM && <small role="alert" className="validation-message">{calcIssues.mietePM}</small>}
                       <span className="input-suffix">€</span>
                     </div>
                   </div>
@@ -1339,7 +1083,8 @@ export default function Home() {
                         readOnly={isMietenRechnerOpen}
                         style={{ background: isMietenRechnerOpen ? 'var(--bg-color)' : '', opacity: isMietenRechnerOpen ? 0.7 : 1 }}
                         onKeyDown={handleEnterKey}
-                      />
+                       aria-invalid={Boolean(calcIssues.mietePA)} />
+{calcIssues.mietePA && <small role="alert" className="validation-message">{calcIssues.mietePA}</small>}
                       <span className="input-suffix">€</span>
                     </div>
                   </div>
@@ -1460,48 +1205,61 @@ export default function Home() {
                   </div>
                 )}
 
+<div className="input-group input-optional"><label htmlFor="calc-movable">Mitverkaufte bewegliche Gegenstände (€)</label><input id="calc-movable" type="text" inputMode="decimal" value={calc.movableItemsAmount} onChange={e=>updateCalc('movableItemsAmount',e.target.value)} aria-invalid={Boolean(calcIssues.movableItemsAmount)} />
+{calcIssues.movableItemsAmount && <small role="alert" className="validation-message">{calcIssues.movableItemsAmount}</small>}<small>Nur angemessen bewertete, separat ausgewiesene Gegenstände, z. B. eine gebrauchte Küche. Abzug ausschließlich bei der Grunderwerbsteuer. Notar/Grundbuch (Standard 2 %) und Makler werden hier weiter auf den Gesamtpreis berechnet; tatsächliche Vereinbarungen und Gebühren können abweichen.</small></div><p className="field-note">Makler: Trage deinen vereinbarten Käuferanteil ein. §§ 656b–656d BGB enthalten besondere Regeln für Verbraucherkäufe von Wohnungen und Einfamilienhäusern; bei anderen Objektarten kann die Verteilung abweichen.</p>
                 <h3 className="cluster-title">4. Laufende, nicht umlagefähige Kosten</h3>
                 <div className="calculation-row">
                   <div className="input-group input-optional">
                     <label htmlFor="maintenance-monthly">Instandhaltung / m² / Monat</label>
+                    <small>Ansatz für laufende Reparaturen. Bereits hier erfasste Beträge nicht nochmals als Rücklage eintragen.</small>
                     <div className="input-wrapper">
-                      <input id="maintenance-monthly" inputMode="decimal" type="text" value={calc.instandhaltungQm} onChange={(e) => updateCalc("instandhaltungQm", e.target.value)} onBlur={() => handleBlurCalc("instandhaltungQm")} onKeyDown={handleEnterKey} />
+                      <input id="maintenance-monthly" inputMode="decimal" type="text" value={calc.instandhaltungQm} onChange={(e) => updateCalc("instandhaltungQm", e.target.value)} onBlur={() => handleBlurCalc("instandhaltungQm")} onKeyDown={handleEnterKey}  aria-invalid={Boolean(calcIssues.instandhaltungQm)} />
+{calcIssues.instandhaltungQm && <small role="alert" className="validation-message">{calcIssues.instandhaltungQm}</small>}
                       <span className="input-suffix">€</span>
                     </div>
                   </div>
                   <div className="input-group input-optional">
                     <label htmlFor="management-monthly">Verwaltung / Monat</label>
                     <div className="input-wrapper">
-                      <input id="management-monthly" inputMode="decimal" type="text" value={calc.verwaltungPm} onChange={(e) => updateCalc("verwaltungPm", e.target.value)} onBlur={() => handleBlurCalc("verwaltungPm")} onKeyDown={handleEnterKey} />
+                      <input id="management-monthly" inputMode="decimal" type="text" value={calc.verwaltungPm} onChange={(e) => updateCalc("verwaltungPm", e.target.value)} onBlur={() => handleBlurCalc("verwaltungPm")} onKeyDown={handleEnterKey}  aria-invalid={Boolean(calcIssues.verwaltungPm)} />
+{calcIssues.verwaltungPm && <small role="alert" className="validation-message">{calcIssues.verwaltungPm}</small>}
                       <span className="input-suffix">€</span>
                     </div>
                   </div>
                   <div className="input-group input-optional">
                     <label htmlFor="reserve-monthly">Rücklage / Monat</label>
+                    <small>Zusätzliche Liquiditätsreserve für künftige Maßnahmen, ohne die bereits angesetzte Instandhaltung. Mindert den verfügbaren Cashflow.</small>
                     <div className="input-wrapper">
-                      <input id="reserve-monthly" inputMode="decimal" type="text" value={calc.ruecklagePm} onChange={(e) => updateCalc("ruecklagePm", e.target.value)} onBlur={() => handleBlurCalc("ruecklagePm")} onKeyDown={handleEnterKey} />
+                      <input id="reserve-monthly" inputMode="decimal" type="text" value={calc.ruecklagePm} onChange={(e) => updateCalc("ruecklagePm", e.target.value)} onBlur={() => handleBlurCalc("ruecklagePm")} onKeyDown={handleEnterKey}  aria-invalid={Boolean(calcIssues.ruecklagePm)} />
+{calcIssues.ruecklagePm && <small role="alert" className="validation-message">{calcIssues.ruecklagePm}</small>}
                       <span className="input-suffix">€</span>
                     </div>
                   </div>
                 </div>
 
+                  <div className="input-group input-optional">
+                    <label htmlFor="vacancy-percent">Mietausfall / Leerstand</label>
+                    <div className="input-wrapper">
+                      <input id="vacancy-percent" inputMode="decimal" type="text" value={calc.vacancyPercent} onChange={(e) => updateCalc("vacancyPercent", e.target.value)} aria-describedby="vacancy-percent-help" aria-invalid={parseNumber(calc.vacancyPercent) < 0 || parseNumber(calc.vacancyPercent) > 100} />
+{calcIssues.vacancyPercent && <small role="alert" className="validation-message">{calcIssues.vacancyPercent}</small>}
+                      <span className="input-suffix">%</span>
+                    </div>
+                    <small id="vacancy-percent-help">0 bis 100 % der Soll-Jahresmiete. Bruttorendite und Kaufpreisfaktor verwenden weiterhin die Soll-Miete.</small>
+                  </div>
+
+                <div className="input-group input-optional">
+                    <label htmlFor="standard-scenario-cost-increase">Kostenänderung im Szenario (−50 % bis +100 %)</label>
+                    <div className="input-wrapper">
+                      <input id="standard-scenario-cost-increase" type="text" inputMode="text" value={scenarioCostInput} onChange={(e) => setScenarioCostInput(e.target.value)} onBlur={() => setScenarioCostInput(formatAcc(scenarioCostIncreasePercent))} onKeyDown={handleEnterKey} aria-describedby="standard-scenario-cost-increase-help" />
+                      <span className="input-suffix">%</span>
+                    </div>
+                    <small id="standard-scenario-cost-increase-help">Negative Werte senken die Kosten. Einmalige Änderung von Instandhaltung, Verwaltung und Rücklage im Szenario. Keine jährliche Steigerung; die Basisrechnung bleibt unverändert. Werte werden auf −50 % bis +100 % begrenzt.</small>
+                  </div>
+
                 <h3 className="cluster-title">5. Finanzierung</h3>
-                <div className="calculation-row">
-                  <div className="input-group input-optional">
-                    <label htmlFor="interest-percent">Zins</label>
-                    <div className="input-wrapper">
-                      <input id="interest-percent" inputMode="decimal" type="text" value={calc.zins} onChange={(e) => updateCalc("zins", e.target.value)} onBlur={() => handleBlurCalc("zins")} onKeyDown={handleEnterKey} />
-                      <span className="input-suffix">%</span>
-                    </div>
-                  </div>
-                  <div className="input-group input-optional">
-                    <label htmlFor="repayment-percent">Tilgung</label>
-                    <div className="input-wrapper">
-                      <input id="repayment-percent" inputMode="decimal" type="text" value={calc.tilgung} onChange={(e) => updateCalc("tilgung", e.target.value)} onBlur={() => handleBlurCalc("tilgung")} onKeyDown={handleEnterKey} />
-                      <span className="input-suffix">%</span>
-                    </div>
-                  </div>
-                </div>
+                <EquityFields state={calc} prefix="standard" issues={calcIssues} onChange={updateCalc} onEnter={handleEnterKey}/>
+
+                <DebtRateFields state={calc} prefix="standard" issues={calcIssues} onChange={updateCalc} onBlur={handleBlurCalc} onEnter={handleEnterKey}/>
 
               </div>
             </section>
@@ -1514,7 +1272,8 @@ export default function Home() {
             icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>}
             badge={`${formatAcc(roe)}% CoC`}
           >
-            <section className="results-sticky">
+            <section className="results-sticky" hidden={criticalInputError}>
+              <ModelNotice />
               <div className="glass-panel" style={{ padding: '1rem', background: 'var(--output-calc-bg)', border: 'none', borderRadius: 0, boxShadow: 'none' }}>
                 <div style={{ position: 'relative', marginBottom: '1.5rem', borderBottom: '1px solid var(--output-calc-border)', paddingBottom: '0.75rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.25rem' }}>
@@ -1573,12 +1332,12 @@ export default function Home() {
                       {roe > 12 ? (
                         <>
                           <span style={{ color: 'var(--success-color)', fontWeight: 700 }}>Starker positiver Cash-on-Cash-Wert</span><br />
-                          Die laufenden Kosten und die Annuität sind in diesem Szenario gedeckt. Prüfe zusätzlich Leerstand, Steuern und den tatsächlichen Darlehensvertrag.
+                          Die laufenden Kosten und die Annuität sind in diesem Szenario gedeckt. Der eingestellte Mietausfall ist berücksichtigt. Prüfe zusätzlich Steuern und den tatsächlichen Darlehensvertrag.
                         </>
                       ) : roe >= 5 ? (
                         <>
                           <span style={{ color: 'var(--warning-color)', fontWeight: 700 }}>Positiver Cash-on-Cash-Wert</span><br />
-                          Das Szenario liefert {formatAcc(roe)}% auf die als Eigenkapital angesetzten Kaufnebenkosten. Zusätzliche Risiken sind noch nicht enthalten.
+                          Das Szenario liefert {formatAcc(roe)}% auf dein gesamtes eingesetztes Eigenkapital. Zusätzliche Risiken sind noch nicht enthalten.
                         </>
                       ) : (
                         <>
@@ -1595,12 +1354,12 @@ export default function Home() {
                   <div className="result-card" style={{ padding: '0.75rem', border: '1px solid var(--accent-color)', background: 'rgba(255,255,255,0.08)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                       <span className="label" style={{ color: 'var(--accent-color)', fontWeight: 700, fontSize: '0.85rem', margin: 0 }}>
-                        Cash-on-Cash-Rendite
+                        Cash-on-Cash-Rendite (vor Steuern)
                       </span>
                       <InfoTooltip
                         id="roe"
                         title="Cash-on-Cash-Rendite"
-                        text="Berechnung: Jahrescashflow nach laufenden Kosten und Annuität geteilt durch die als Eigenkapital angesetzten Kaufnebenkosten. Modellannahme: Der Kaufpreis wird vollständig finanziert."
+                        text="Berechnung vor Steuern: Jahrescashflow nach laufenden Kosten und Annuität geteilt durch Kaufnebenkosten plus Eigenkapital im Kaufpreis. Der Darlehensbetrag sinkt um deinen Eigenkapitalanteil am Kaufpreis."
                         activeId={activeTooltip}
                         onToggle={(id) => setActiveTooltip(activeTooltip === id ? null : id)}
                       />
@@ -1608,7 +1367,7 @@ export default function Home() {
                     <span className={`value ${roe >= 0 ? 'positive' : 'negative'}`} style={{ fontSize: '1.5rem' }}>
                       {formatAcc(roe)} %
                     </span>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>auf eingesetzte Nebenkosten</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>auf gesamtes eingesetztes Eigenkapital</span>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
@@ -1627,11 +1386,11 @@ export default function Home() {
                     </div>
                     <div className="result-card" style={{ padding: '0.5rem', background: 'rgba(255,255,255,0.08)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span className="label" style={{ fontSize: '0.7rem', margin: 0 }}>Netto-Rendite</span>
+                        <span className="label" style={{ fontSize: '0.7rem', margin: 0 }}>Netto-Rendite (vor Steuern)</span>
                         <InfoTooltip
                           id="netto"
                           title="Netto-Mietrendite"
-                          text="Berechnung: Jahreskaltmiete minus Instandhaltung, Verwaltung und Rücklage, geteilt durch die Gesamt-Investition. Leerstand und Steuern sind nicht enthalten."
+                          text="Berechnung: Jahreskaltmiete nach Mietausfall minus Instandhaltung, Verwaltung und Rücklage, geteilt durch die Gesamt-Investition. Der eingestellte Mietausfall ist abgezogen; Steuern sind nicht enthalten."
                           activeId={activeTooltip}
                           onToggle={(id) => setActiveTooltip(activeTooltip === id ? null : id)}
                         />
@@ -1655,7 +1414,14 @@ export default function Home() {
                   </div>
                 </div>
 
+                <div className="metric-summary" aria-label="Finanzierungsstruktur">
+                  <div><span>Darlehensbetrag</span><strong>{formatAcc(standardResult.financing.principal)} €</strong></div>
+                  <div><span>Eigenkapital im Kaufpreis</span><strong>{formatAcc(standardResult.financing.equityInPrice)} €</strong></div>
+                  <div><span>Eigenkapital gesamt (inkl. NK)</span><strong>{formatAcc(standardResult.totalEquityRequired)} €</strong></div>
+                  {standardResult.financing.fixedInterestYears !== null && <div><span>Zinsbindung</span><strong>{standardResult.financing.fixedInterestYears} Jahre</strong></div>}
+                </div>
                 <div className="metric-summary" aria-label="Laufende Kosten und Netto-Mietertrag">
+                  <div><span>Mietausfall / Jahr</span><strong>−{formatAcc(standardCase.vacancyAnnual)} €</strong></div>
                   <div>
                     <span>Laufende Kosten / Monat</span>
                     <strong>-{formatAcc(laufendeKostenPM)} €</strong>
@@ -1670,11 +1436,11 @@ export default function Home() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
                   <div className="result-card" style={{ padding: '1rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span className="label" style={{ margin: 0 }}>CF / Monat</span>
+                      <span className="label" style={{ margin: 0 }}>CF / Monat (vor Steuern)</span>
                       <InfoTooltip
                         id="cfpm"
                         title="Cashflow pro Monat"
-                        text="Monatliche Kaltmiete minus laufende nicht umlagefähige Kosten und Annuität (Zins + Tilgung)."
+                        text="Monatliche Kaltmiete nach Mietausfall minus laufende nicht umlagefähige Kosten und Annuität (Zins + Tilgung)."
                         activeId={activeTooltip}
                         onToggle={(id) => setActiveTooltip(activeTooltip === id ? null : id)}
                       />
@@ -1685,11 +1451,11 @@ export default function Home() {
                   </div>
                   <div className="result-card" style={{ padding: '1rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span className="label" style={{ margin: 0 }}>CF / Jahr</span>
+                      <span className="label" style={{ margin: 0 }}>CF / Jahr (vor Steuern)</span>
                       <InfoTooltip
                         id="cfpa"
                         title="Cashflow pro Jahr"
-                        text="Jahreskaltmiete minus laufende nicht umlagefähige Kosten und jährliche Annuität. Leerstand und Steuern sind nicht enthalten."
+                        text="Jahreskaltmiete nach Mietausfall minus laufende nicht umlagefähige Kosten und jährliche Annuität. Der eingestellte Mietausfall ist abgezogen; Steuern sind nicht enthalten."
                         activeId={activeTooltip}
                         onToggle={(id) => setActiveTooltip(activeTooltip === id ? null : id)}
                       />
@@ -1804,7 +1570,7 @@ export default function Home() {
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem' }}>
                         <div style={{ width: '10px', height: '10px', background: 'var(--success-color)', borderRadius: '2px' }}></div>
-                        <div style={{ flex: 1 }}>Cashflow</div>
+                        <div style={{ flex: 1 }}>Cashflow (vor Steuern)</div>
                         <div style={{ fontWeight: 600 }}>{Math.round(cashflowAnteil)}%</div>
                       </div>
                       {deckungslueckePA > 0 && (
@@ -1848,7 +1614,8 @@ export default function Home() {
                         placeholder="Fläche"
                         value={calc.wohnflaeche}
                         onChange={(e) => updateCalc("wohnflaeche", e.target.value)}
-                      />
+                       aria-invalid={Boolean(calcIssues.wohnflaeche)} />
+{calcIssues.wohnflaeche && <small role="alert" className="validation-message">{calcIssues.wohnflaeche}</small>}
                       <span style={{ fontSize: '0.8rem' }}>m² ×</span>
                       <input
                         aria-label="Mietpreis pro Quadratmeter für Mietpotenzial"
@@ -1857,7 +1624,8 @@ export default function Home() {
                         placeholder="€/m²"
                         value={rev.zielMietpreisQm}
                         onChange={(e) => updateRev("zielMietpreisQm", e.target.value)}
-                      />
+                       aria-invalid={Boolean(revIssues.zielMietpreisQm)} />
+{revIssues.zielMietpreisQm && <small role="alert" className="validation-message">{revIssues.zielMietpreisQm}</small>}
                       <span style={{ fontSize: '0.8rem' }}>=</span>
                       <output aria-label="Monatliche Kaltmiete" style={{ fontSize: '0.9rem', color: 'var(--text-main)', fontWeight: 800 }}>{formatAcc(quickRentPotential)} € / Monat</output>
                     </div>
@@ -1891,14 +1659,16 @@ export default function Home() {
                     <div className="input-group input-required">
                       <label htmlFor="target-rent-sqm">Miete / m² (Ziel)</label>
                       <div className={`input-wrapper ${isFlashActive ? 'flash-update' : ''} ${syncedFields.zielMietpreisQm ? 'input-synced' : ''}`} style={{ border: '1px solid var(--accent-color)', borderRadius: '8px' }}>
-                        <input id="target-rent-sqm" inputMode="decimal" type="text" value={rev.zielMietpreisQm} onChange={(e) => updateRev("zielMietpreisQm", e.target.value)} onBlur={() => handleBlurRev("zielMietpreisQm")} onKeyDown={handleEnterKey} style={{ fontWeight: 700, color: syncedFields.zielMietpreisQm ? 'var(--success-color)' : 'var(--accent-color)' }} />
+                        <input id="target-rent-sqm" inputMode="decimal" type="text" value={rev.zielMietpreisQm} onChange={(e) => updateRev("zielMietpreisQm", e.target.value)} onBlur={() => handleBlurRev("zielMietpreisQm")} onKeyDown={handleEnterKey} style={{ fontWeight: 700, color: syncedFields.zielMietpreisQm ? 'var(--success-color)' : 'var(--accent-color)' }}  aria-invalid={Boolean(revIssues.zielMietpreisQm)} />
+{revIssues.zielMietpreisQm && <small role="alert" className="validation-message">{revIssues.zielMietpreisQm}</small>}
                         <span className="input-suffix">€</span>
                       </div>
                     </div>
                     <div className="input-group input-required">
                       <label htmlFor="target-annual-rent">Kaltmiete / p.a. (Ziel)</label>
                       <div className={`input-wrapper ${isFlashActive ? 'flash-update' : ''} ${syncedFields.zielMietePA ? 'input-synced' : ''}`}>
-                        <input id="target-annual-rent" inputMode="decimal" type="text" value={rev.zielMietePA} onChange={(e) => updateRev("zielMietePA", e.target.value)} onBlur={() => handleBlurRev("zielMietePA")} onKeyDown={handleEnterKey} />
+                        <input id="target-annual-rent" inputMode="decimal" type="text" value={rev.zielMietePA} onChange={(e) => updateRev("zielMietePA", e.target.value)} onBlur={() => handleBlurRev("zielMietePA")} onKeyDown={handleEnterKey}  aria-invalid={Boolean(revIssues.zielMietePA)} />
+{revIssues.zielMietePA && <small role="alert" className="validation-message">{revIssues.zielMietePA}</small>}
                         <span className="input-suffix">€</span>
                       </div>
                     </div>
@@ -1944,7 +1714,9 @@ export default function Home() {
                     <div className="input-group input-optional">
                       <label htmlFor="reverse-notary-percent">Notar (Fixiert)</label>
                       <div className={`input-wrapper ${isFlashActive ? 'flash-update' : ''} ${syncedFields.notarProzent ? 'input-synced' : ''}`}>
-                        <input id="reverse-notary-percent" type="text" value={rev.notarProzent} readOnly style={{ opacity: 0.7, background: 'var(--bg-color)' }} />
+                        <input id="reverse-notary-percent" type="text" value={rev.notarProzent} readOnly style={{ opacity: 0.7, background: 'var(--bg-color)' }}  aria-invalid={Boolean(revIssues.notarProzent)} />
+{revIssues.notarProzent && <small role="alert" className="validation-message">{revIssues.notarProzent}</small>}
+                      {revIssues.notarProzent && <small role="alert" className="validation-message">{revIssues.notarProzent}</small>}
                         <span className="input-suffix">%</span>
                       </div>
                     </div>
@@ -1955,7 +1727,8 @@ export default function Home() {
                         Maklerprovision
                       </label>
                       <div className={`input-wrapper ${isFlashActive ? 'flash-update' : ''} ${syncedFields.maklerProzent ? 'input-synced' : ''}`} style={{ opacity: rev.hasMakler ? 1 : 0.5, pointerEvents: rev.hasMakler ? 'auto' : 'none' }}>
-                        <input id="reverse-broker-percent" aria-label="Maklerprovision in Prozent" inputMode="decimal" type="text" value={rev.maklerProzent} onChange={(e) => updateRev("maklerProzent", e.target.value)} onBlur={() => handleBlurRev("maklerProzent")} onKeyDown={handleEnterKey} />
+                        <input id="reverse-broker-percent" aria-label="Maklerprovision in Prozent" inputMode="decimal" type="text" value={rev.maklerProzent} onChange={(e) => updateRev("maklerProzent", e.target.value)} onBlur={() => handleBlurRev("maklerProzent")} onKeyDown={handleEnterKey}  aria-invalid={Boolean(revIssues.maklerProzent)} />
+{revIssues.maklerProzent && <small role="alert" className="validation-message">{revIssues.maklerProzent}</small>}
                         <span className="input-suffix">%</span>
                       </div>
                     </div>
@@ -1963,17 +1736,21 @@ export default function Home() {
                     <div className="input-group output-calc">
                       <label htmlFor="reverse-broker-amount">Maklerprovision (€)</label>
                       <div className="input-wrapper" style={{ opacity: rev.hasMakler ? 1 : 0.5 }}>
-                        <input id="reverse-broker-amount" type="text" readOnly value={formatAcc(revMaklerEuro)} />
+                        <input id="reverse-broker-amount" type="text" readOnly value={reverseResult.base.priceLimitStatus === "bounded" ? formatAcc(revMaklerEuro) : "—"} />
                         <span className="input-suffix">€</span>
                       </div>
                     </div>
                   </div>
 
+<div className="input-group input-optional"><label htmlFor="rev-movable">Mitverkaufte bewegliche Gegenstände (€)</label><input id="rev-movable" type="text" inputMode="decimal" value={rev.movableItemsAmount} onChange={e=>updateRev('movableItemsAmount',e.target.value)} aria-invalid={Boolean(revIssues.movableItemsAmount)} />
+{revIssues.movableItemsAmount && <small role="alert" className="validation-message">{revIssues.movableItemsAmount}</small>}<small>Nur angemessen bewertete, separat ausgewiesene Gegenstände, z. B. eine gebrauchte Küche. Abzug ausschließlich bei der Grunderwerbsteuer. Notar/Grundbuch (Standard 2 %) und Makler werden hier weiter auf den Gesamtpreis berechnet; tatsächliche Vereinbarungen und Gebühren können abweichen.</small></div><p className="field-note">Makler: Trage deinen vereinbarten Käuferanteil ein. §§ 656b–656d BGB enthalten besondere Regeln für Verbraucherkäufe von Wohnungen und Einfamilienhäusern; bei anderen Objektarten kann die Verteilung abweichen.</p>
                   <div className="calculation-row">
                     <div className="input-group input-optional">
                       <label htmlFor="reverse-maintenance">Instandhaltung / m² / Monat</label>
+                    <small>Ansatz für laufende Reparaturen. Bereits hier erfasste Beträge nicht nochmals als Rücklage eintragen.</small>
                       <div className="input-wrapper">
-                        <input id="reverse-maintenance" inputMode="decimal" type="text" value={rev.instandhaltungQm} onChange={(e) => updateRev("instandhaltungQm", e.target.value)} onBlur={() => handleBlurRev("instandhaltungQm")} onKeyDown={handleEnterKey} />
+                        <input id="reverse-maintenance" inputMode="decimal" type="text" value={rev.instandhaltungQm} onChange={(e) => updateRev("instandhaltungQm", e.target.value)} onBlur={() => handleBlurRev("instandhaltungQm")} onKeyDown={handleEnterKey}  aria-invalid={Boolean(revIssues.instandhaltungQm)} />
+{revIssues.instandhaltungQm && <small role="alert" className="validation-message">{revIssues.instandhaltungQm}</small>}
                         <span className="input-suffix">€</span>
                       </div>
                     </div>
@@ -1981,62 +1758,63 @@ export default function Home() {
                     <div className="input-group input-optional">
                       <label htmlFor="reverse-management">Hausverwaltung / Monat</label>
                       <div className="input-wrapper">
-                        <input id="reverse-management" inputMode="decimal" type="text" value={rev.verwaltungPm} onChange={(e) => updateRev("verwaltungPm", e.target.value)} onBlur={() => handleBlurRev("verwaltungPm")} onKeyDown={handleEnterKey} />
+                        <input id="reverse-management" inputMode="decimal" type="text" value={rev.verwaltungPm} onChange={(e) => updateRev("verwaltungPm", e.target.value)} onBlur={() => handleBlurRev("verwaltungPm")} onKeyDown={handleEnterKey}  aria-invalid={Boolean(revIssues.verwaltungPm)} />
+{revIssues.verwaltungPm && <small role="alert" className="validation-message">{revIssues.verwaltungPm}</small>}
                         <span className="input-suffix">€</span>
                       </div>
                     </div>
 
                     <div className="input-group input-optional">
                       <label htmlFor="reverse-reserve">Rücklage / Monat</label>
+                    <small>Zusätzliche Liquiditätsreserve für künftige Maßnahmen, ohne die bereits angesetzte Instandhaltung. Mindert den verfügbaren Cashflow.</small>
                       <div className="input-wrapper">
-                        <input id="reverse-reserve" inputMode="decimal" type="text" value={rev.ruecklagePm} onChange={(e) => updateRev("ruecklagePm", e.target.value)} onBlur={() => handleBlurRev("ruecklagePm")} onKeyDown={handleEnterKey} />
+                        <input id="reverse-reserve" inputMode="decimal" type="text" value={rev.ruecklagePm} onChange={(e) => updateRev("ruecklagePm", e.target.value)} onBlur={() => handleBlurRev("ruecklagePm")} onKeyDown={handleEnterKey}  aria-invalid={Boolean(revIssues.ruecklagePm)} />
+{revIssues.ruecklagePm && <small role="alert" className="validation-message">{revIssues.ruecklagePm}</small>}
                         <span className="input-suffix">€</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="calculation-row">
-                    <div className="input-group input-optional">
-                      <label htmlFor="reverse-interest">Zins</label>
-                      <div className={`input-wrapper ${isFlashActive ? 'flash-update' : ''} ${syncedFields.zins ? 'input-synced' : ''}`}>
-                        <input id="reverse-interest" inputMode="decimal" type="text" value={rev.zins} onChange={(e) => updateRev("zins", e.target.value)} onBlur={() => handleBlurRev("zins")} onKeyDown={handleEnterKey} />
-                        <span className="input-suffix">%</span>
-                      </div>
+                  <div className="input-group input-optional">
+                    <label htmlFor="reverse-vacancy-percent">Mietausfall / Leerstand</label>
+                    <div className="input-wrapper">
+                      <input id="reverse-vacancy-percent" inputMode="decimal" type="text" value={rev.vacancyPercent} onChange={(e) => updateRev("vacancyPercent", e.target.value)} aria-describedby="reverse-vacancy-percent-help" aria-invalid={parseNumber(rev.vacancyPercent) < 0 || parseNumber(rev.vacancyPercent) > 100} />
+{revIssues.vacancyPercent && <small role="alert" className="validation-message">{revIssues.vacancyPercent}</small>}
+                      <span className="input-suffix">%</span>
                     </div>
-
-                    <div className="input-group input-optional">
-                      <label htmlFor="reverse-repayment">Tilgung</label>
-                      <div className={`input-wrapper ${isFlashActive ? 'flash-update' : ''} ${syncedFields.tilgung ? 'input-synced' : ''}`}>
-                        <input id="reverse-repayment" inputMode="decimal" type="text" value={rev.tilgung} onChange={(e) => updateRev("tilgung", e.target.value)} onBlur={() => handleBlurRev("tilgung")} onKeyDown={handleEnterKey} />
-                        <span className="input-suffix">%</span>
-                      </div>
-                    </div>
+                    <small id="reverse-vacancy-percent-help">0 bis 100 % der Soll-Jahresmiete. Bruttorendite und Kaufpreisfaktor verwenden weiterhin die Soll-Miete.</small>
                   </div>
+
+                <EquityFields state={rev} prefix="reverse" issues={revIssues} onChange={updateRev} onEnter={handleEnterKey}/>
+
+                  <DebtRateFields state={rev} prefix="reverse" issues={revIssues} onChange={updateRev} onBlur={handleBlurRev} onEnter={handleEnterKey}/>
                 </div>
               </section>
             </CollapsibleSection>
 
-            <section className="results-sticky">
+            <section className="results-sticky" hidden={criticalInputError}>
+              <ModelNotice />
               <CollapsibleSection
-                title="Ergebnis (Break-Even)"
+                title="Kaufpreis bei Zielvorgabe"
                 icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>}
-                badge={`${formatAcc(revKaufpreis)} €`}
+                badge={describePriceLimit(reverseResult.base)}
               >
                 <section style={{ padding: '1rem', background: 'var(--output-calc-bg)', borderRadius: '0 0 12px 12px' }}>
-                  <h3 style={{ marginBottom: '1rem', color: 'var(--success-color)' }}>Ergebnis (Break-Even)</h3>
+                  <h3 style={{ marginBottom: '1rem', color: 'var(--success-color)' }}>Kaufpreis bei Zielvorgabe</h3>
 
+                  <p>Break-even: Ziel-Cashflow 0 € vor Steuern.</p>
                   <div className="results-hero-vertical" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div className="result-card" style={{ padding: '1rem', border: '2px solid var(--success-color)' }}>
-                      <span className="label">Max. Kaufpreis (vor NK)</span>
+                      <span className="label">Kaufpreis bei Ziel-Cashflow</span>
                       <span className="value positive" style={{ fontSize: '1.8rem' }}>
-                        {formatAcc(revKaufpreis)} €
+                        {describePriceLimit(reverseResult.base)}
                       </span>
                     </div>
 
                     <div className="result-card" style={{ padding: '1rem' }}>
                       <span className="label">Gesamtkaufpreis (inkl. NK)</span>
                       <span className="value" style={{ fontSize: '1.4rem' }}>
-                        {formatAcc(revMaxGesamtKaufpreis)} €
+                        {reverseResult.base.priceLimitStatus === "bounded" ? `${formatAcc(revMaxGesamtKaufpreis)} €` : "—"}
                       </span>
                     </div>
 
@@ -2050,15 +1828,20 @@ export default function Home() {
                           Für {formatAcc(revAngebot.offeredPurchasePrice)} € Kaufpreis sind mindestens {formatAcc(revAngebot.requiredMonthlyRentPerSqm)} €/m² bzw. {formatAcc(revAngebot.requiredMonthlyRent)} € Kaltmiete pro Monat erforderlich.
                         </small>
                         <small style={{ color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                          Gesamtinvestition inklusive Kaufnebenkosten: {formatAcc(revAngebot.totalInvestment)} €.
+                          Gesamtinvestition inklusive Kaufnebenkosten: {formatAcc(revAngebot.totalInvestment)} €. Darlehen: {formatAcc(revAngebot.financing.principal)} €. Eigenkapital gesamt: {formatAcc(revAngebot.totalEquityRequired)} €.
                         </small>
                       </div>
                     )}
                   </div> {/* End Hero Vertical */}
 
                   <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)', fontSize: '0.9rem' }}>
-                    <span>Anteil NK: <strong>{formatAcc(revNkEuro)} €</strong></span>
+                    <span>Anteil NK: <strong>{revPriceHasLimit ? `${formatAcc(revNkEuro)} €` : "—"}</strong></span>
                   </div>
+                  {revPriceHasLimit && <div className="metric-summary" aria-label="Finanzierung beim errechneten Kaufpreis">
+                    <div><span>Darlehen beim errechneten Kaufpreis</span><strong>{formatAcc(reverseResult.base.financing.principal)} €</strong></div>
+                    <div><span>Eigenkapital gesamt (inkl. NK)</span><strong>{formatAcc(reverseResult.base.totalEquityRequired)} €</strong></div>
+                  </div>}
+                  {!revPriceHasLimit && <p role="status">{reverseResult.base.priceLimitStatus === "unbounded" ? "Ohne Darlehensrate lässt sich aus dem Cashflow keine endliche Kaufpreisgrenze bestimmen. Das Modell berücksichtigt hier keine Begrenzung deines verfügbaren Eigenkapitals." : "Die Zielmiete reicht bereits für die laufenden Kosten nicht aus."}</p>}
                   <div className="reverse-assumption">
                     <span>Laufende Kosten p.a.</span>
                     <strong>-{formatAcc(revLaufendeKostenPA)} €</strong>
@@ -2071,25 +1854,41 @@ export default function Home() {
                       <span style={{ color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 600 }}>Szenario Analyse</span>
                       <button
                         type="button"
-                        onClick={() => setRentIncrease(15)}
+                        onClick={() => setRentIncreaseInput("15")}
                         style={{ background: 'var(--success-strong)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', padding: '0.35rem 0.65rem', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 700 }}
                       >
                         +15% Fix
                       </button>
                     </div>
+                    <div className="input-group input-optional">
+                    <label htmlFor="reverse-scenario-cost-increase">Kostenänderung im Szenario (−50 % bis +100 %)</label>
+                    <div className="input-wrapper">
+                      <input id="reverse-scenario-cost-increase" type="text" inputMode="text" value={scenarioCostInput} onChange={(e) => setScenarioCostInput(e.target.value)} onBlur={() => setScenarioCostInput(formatAcc(scenarioCostIncreasePercent))} onKeyDown={handleEnterKey} aria-describedby="reverse-scenario-cost-increase-help" />
+                      <span className="input-suffix">%</span>
+                    </div>
+                    <small id="reverse-scenario-cost-increase-help">Negative Werte senken die Kosten. Einmalige Änderung von Instandhaltung, Verwaltung und Rücklage im Szenario. Keine jährliche Steigerung; die Basisrechnung bleibt unverändert. Werte werden auf −50 % bis +100 % begrenzt.</small>
+                  </div>
                     <label htmlFor="rent-increase" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 500 }}>
-                      <span>Mietsteigerung (+{rentIncrease}%)</span>
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Max Kaufpreis neu: <span className="positive" style={{ fontWeight: 700 }}>{formatAcc(revKaufpreisNeu)} €</span></span>
+                      <span>Mietänderung ({rentIncrease > 0 ? "+" : ""}{formatAcc(rentIncrease)} %)</span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Max Kaufpreis neu: <span className="positive" style={{ fontWeight: 700 }}>{describePriceLimit(reverseResult.scenario)}</span></span>
                       <div className="scenario-note">
-                        <span>Bei {rentIncrease}% Steigerung: <strong>{formatAcc(revKaufpreisNeu)} €</strong></span>
+                        <span>Bei {formatAcc(rentIncrease)} % Miet- und {formatAcc(scenarioCostIncreasePercent)} % Kostenänderung: <strong>{describePriceLimit(reverseResult.scenario)}</strong></span>
                       </div>
                     </label>
+                    <div className="input-group input-optional">
+                      <label htmlFor="rent-change-input">Mietänderung eingeben (−50 % bis +100 %)</label>
+                      <div className="input-wrapper">
+                        <input id="rent-change-input" type="text" inputMode="text" value={rentIncreaseInput} onChange={(e) => setRentIncreaseInput(e.target.value)} onBlur={() => setRentIncreaseInput(formatAcc(rentIncrease))} onKeyDown={handleEnterKey} aria-describedby="rent-change-help" />
+                        <span className="input-suffix">%</span>
+                      </div>
+                      <small id="rent-change-help">Negative Werte senken die Soll-Miete. Werte außerhalb des Bereichs werden auf −50 % beziehungsweise +100 % begrenzt.</small>
+                    </div>
                     <input
                       id="rent-increase"
                       type="range"
-                      min="0" max="50" step="1"
+                      min={SCENARIO_PERCENT_MIN} max={SCENARIO_PERCENT_MAX} step="0.1"
                       value={rentIncrease}
-                      onChange={(e) => setRentIncrease(parseInt(e.target.value))}
+                      onChange={(e) => setRentIncreaseInput(e.target.value)}
                       style={{ width: '100%', marginTop: '0.5rem', accentColor: 'var(--success-color)', height: '6px', cursor: 'pointer' }}
                     />
                   </div>
@@ -2100,60 +1899,9 @@ export default function Home() {
         </div>
       )}
 
-      {scanResult && (
-        <div className="dialog-backdrop">
-          <div
-            ref={scanDialogRef}
-            className="glass-panel scan-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="scan-result-title"
-            tabIndex={-1}
-          >
-            <h2 id="scan-result-title" style={{ color: 'var(--success-strong)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              Erkannte Werte prüfen
-            </h2>
-            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>Diese Werte wurden aus dem Bild erkannt. Sie werden erst nach deiner Bestätigung übernommen.</p>
+      {scanResult && <OcrReviewDialog result={scanResult} onCancel={()=>setScanResult(null)} onApply={applyScanResult}/>}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
-              {scanResult.kaufpreis && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Kaufpreis:</span>
-                  <strong style={{ color: 'var(--text-main)' }}>{scanResult.kaufpreis} €</strong>
-                </div>
-              )}
-              {scanResult.wohnflaeche && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Wohnfläche:</span>
-                  <strong style={{ color: 'var(--text-main)' }}>{scanResult.wohnflaeche} m²</strong>
-                </div>
-              )}
-              {scanResult.mietePM && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Kaltmiete:</span>
-                  <strong style={{ color: 'var(--text-main)' }}>{scanResult.mietePM} €</strong>
-                </div>
-              )}
-              {scanResult.baujahr && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Baujahr:</span>
-                  <strong style={{ color: 'var(--text-main)' }}>{scanResult.baujahr}</strong>
-                </div>
-              )}
-            </div>
-
-            <div className="dialog-actions">
-              <button type="button" className="dialog-button dialog-button--secondary" onClick={() => setScanResult(null)}>
-                Abbrechen
-              </button>
-              <button type="button" className="dialog-button dialog-button--primary" onClick={applyScanResult}>
-                Werte übernehmen
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
+

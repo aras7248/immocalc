@@ -1,0 +1,85 @@
+name: ImmoCalc CI
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Build-only placeholders: no production data or credentials are used.
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-not-a-production-key
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.18.0"
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        if: ${{ !cancelled() && success() }}
+        run: npm run lint
+      - name: Unit tests
+        if: ${{ !cancelled() }}
+        run: npm test
+      - name: Production build
+        if: ${{ !cancelled() }}
+        run: npm run build
+
+      - name: Install isolated browser test tools
+        run: npm install --no-save --package-lock=false playwright@1.56.1
+      - name: Cache Chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-1.56.1-${{ runner.os }}
+      - name: Install Chromium
+        run: npx playwright install chromium
+      - name: Browser smoke tests with mocked backend
+        run: |
+          npm start -- -p 4001 > /tmp/immocalc-server.log 2>&1 &
+          for attempt in $(seq 1 40); do if curl -fsS http://127.0.0.1:4001/login > /dev/null; then break; fi; sleep 1; done
+          node scripts/browser-smoke.mjs
+      - name: Retain browser screenshots and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-qa-${{ github.run_id }}
+          path: test-results/
+
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: immocalc_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test isolated migrations and ownership
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:ci-only-password@localhost:5432/immocalc_test
+        run: bash scripts/test-database.sh

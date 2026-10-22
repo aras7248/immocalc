@@ -1,0 +1,354 @@
+/* ─── Shared ImmoCow controls ───────────────────────────── */
+.theme-toggle {
+  min-height: 44px;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 700;
+  transition: color 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.theme-toggle:hover {
+  color: var(--text-primary);
+  border-color: var(--accent);
+  background: var(--bg-secondary);
+}
+
+.theme-toggle--compact {
+  width: 44px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.theme-toggle__indicator {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  background: linear-gradient(90deg, currentColor 50%, transparent 50%);
+}
+
+.brand-logo--dark {
+  display: none;
+}
+
+.dark .brand-logo--light {
+  display: none;
+}
+
+.dark .brand-logo--dark {
+  display: block;
+}
+
+/* ─── ImmoCow application shell ─────────────────────────── */
+.app-topbar {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.25rem 0 0.75rem;
+}
+
+.app-brand {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.app-brand__mark {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+
+.app-brand__title {
+  margin: 0;
+  font-family: var(--font-outfit), Outfit, var(--font-inter), Inter, sans-serif;
+  font-size: 1.25rem;
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.app-brand__eyebrow {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+}
+
+.icon-button {
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--card-bg);
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color 180ms ease, border-color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.icon-button:hover {
+  border-color: var(--accent);
+  background: var(--bg-secondary);
+}
+
+.icon-button:active {
+  transform: scale(0.96);
+}
+
+.icon-button--active {
+  color: var(--accent-text);
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+}
+
+.icon-button--danger {
+  color: var(--error-strong);
+}
+
+.icon-button--success {
+  color: var(--success-strong);
+}
+
+.icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.app-signout {
+  min-height: 44px;
+  padding: 0 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 750;
+  transition: color 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.app-signout:hover {
+  color: var(--error-strong);
+  border-color: var(--error);
+  background: rgba(239, 68, 68, 0.07);
+}
+
+.tooltip-trigger {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+}
+
+.metric-summary {
+  margin-bottom: 0.75rem;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.metric-summary > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.metric-summary span,
+.reverse-assumption span {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.metric-summary strong,
+.reverse-assumption strong {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.95rem;
+}
+
+.reverse-assumption {
+  margin-top: 0.8rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.15rem 0.75rem;
+}
+
+.reverse-assumption small {
+  grid-column: 1 / -1;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+}
+
+.scenario-note {
+  margin-top: 0.5rem;
+  padding: 0.65rem;
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  border-radius: var(--radius-md);
+  background: rgba(16, 185, 129, 0.08);
+  color: var(--success-strong);
+  font-size: 0.78rem;
+}
+
+.quick-rent-checker {
+  padding: 0.8rem 1rem;
+  border-style: dashed;
+  border-color: var(--accent);
+  background: var(--input-optional-bg);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.quick-rent-checker__formula {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.quick-rent-checker__formula input {
+  width: 82px;
+  min-height: 44px;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+}
+
+.saved-object {
+  min-height: 52px;
+  border: 1px solid var(--input-optional-border);
+  border-radius: var(--radius-md);
+  background: var(--input-optional-bg);
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+  transition: border-color 180ms ease, background 180ms ease;
+}
+
+.saved-object:hover,
+.saved-object:focus-within {
+  border-color: var(--accent);
+}
+
+.saved-object__load {
+  min-width: 0;
+  flex: 1;
+  padding: 0.45rem 0.65rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.saved-object__delete {
+  width: 48px;
+  min-height: 48px;
+  border: 0;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  color: var(--error-strong);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  opacity: 0.72;
+}
+
+.saved-object__delete:hover {
+  background: rgba(239, 68, 68, 0.08);
+  opacity: 1;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(6px);
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+}
+
+.scan-dialog {
+  width: min(100%, 480px);
+  max-height: calc(100dvh - 2rem);
+  padding: clamp(1.25rem, 4vw, 2rem);
+  border-color: rgba(16, 185, 129, 0.45);
+  overflow-y: auto;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.dialog-button {
+  min-height: 48px;
+  flex: 1;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.dialog-button--secondary {
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text-primary);
+}
+
+.dialog-button--primary {
+  border: 1px solid var(--success-strong);
+  background: var(--success-strong);
+  color: #ffffff;
+}
+

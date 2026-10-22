@@ -1,0 +1,12 @@
+[hidden]{display:none!important}
+.collapsible{margin-bottom:0}.collapsible.is-closed{margin-bottom:-.5rem}
+.collapsible__button{width:100%;display:flex;align-items:center;gap:.5rem;padding:.6rem 1rem;background:var(--glass-bg);border:1px solid var(--glass-border);border-radius:16px;cursor:pointer;font-size:.9rem;font-weight:600;color:var(--text-main);transition:all .25s ease;backdrop-filter:blur(12px)}
+.collapsible.is-open .collapsible__button{border-color:var(--accent-color);border-radius:16px 16px 0 0;color:var(--accent-color)}
+.collapsible__title{flex:1;text-align:left}.collapsible__badge{background:var(--accent-color);color:#fff;border-radius:999px;padding:.1rem .5rem;font-size:.7rem;font-weight:700}
+.collapsible__chevron{transition:transform .25s}.collapsible.is-open .collapsible__chevron{transform:rotate(180deg)}
+.collapsible__content{border:1px solid var(--accent-color);border-top:none;border-radius:0 0 16px 16px;overflow:hidden;animation:fadeIn .2s ease-out}
+
+.model-notice { font-size: .8rem; line-height: 1.5; color: var(--text-secondary); }
+.site-footer { max-width: 1200px; margin: 2rem auto; padding: 1rem; text-align: center; }
+.site-footer nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 1rem; }
+.legal-page { max-width: 800px; margin: 3rem auto; padding: 1.5rem; line-height: 1.6; }

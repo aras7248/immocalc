@@ -1,0 +1,2 @@
+import assert from 'node:assert/strict';import test from 'node:test';import {requireSupabaseConfig} from './supabaseConfig.ts';
+test('C2: missing configuration fails explicitly without leaking keys',()=>{assert.throws(()=>requireSupabaseConfig(undefined,'secret-value'),/Konfiguration fehlt/);assert.throws(()=>requireSupabaseConfig('invalid','x'),/gültige URL/);assert.deepEqual(requireSupabaseConfig('https://example.supabase.co','placeholder'),{url:'https://example.supabase.co',key:'placeholder'});});

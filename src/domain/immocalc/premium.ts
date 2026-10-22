@@ -1,8 +1,8 @@
 export const PREMIUM_ANALYSIS_SCHEMA_VERSION = 1 as const;
-export const PREMIUM_CALCULATION_VERSION = "2026.1" as const;
+export const PREMIUM_CALCULATION_VERSION = "2026.2" as const;
 
 export type PremiumPlanId = "investor" | "professional";
-export type ImmocalcAccessLevel = "free" | PremiumPlanId | "admin";
+export type ImmocalcAccessLevel = "free" | PremiumPlanId;
 
 export interface PremiumPlanDefinition {
   id: PremiumPlanId;
@@ -39,7 +39,7 @@ export function hasPremiumAccess(level: ImmocalcAccessLevel) {
 
 export function getPremiumProjectLimit(level: ImmocalcAccessLevel) {
   if (level === "free") return 0;
-  if (level === "admin" || level === "professional") return null;
+  if (level === "professional") return null;
   return PREMIUM_PLAN_DEFINITIONS[level].projectLimit;
 }
 
@@ -56,4 +56,12 @@ export function createPremiumAnalysisEnvelope<TInput>(input: TInput): PremiumAna
     input,
     result: null,
   };
+}
+
+
+export function resolveAccessLevel(value:unknown,now=Date.now()):ImmocalcAccessLevel {
+ if(typeof value!=='object'||value===null)return 'free';
+ const row=value as Record<string,unknown>;
+ if(row.valid_until!=null&&(typeof row.valid_until!=='string'||!Number.isFinite(Date.parse(row.valid_until))||Date.parse(row.valid_until)<=now))return 'free';
+ return row.level==='investor'||row.level==='professional'?row.level:'free';
 }

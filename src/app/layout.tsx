@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Metadata, Viewport } from "next";
 import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
@@ -58,7 +59,7 @@ export default function RootLayout({
         <ThemeProvider>
           <AuthProvider>
             {children}
-            <footer className="site-footer"><ModelNotice /></footer>
+            <footer className="site-footer"><ModelNotice /><nav aria-label="Rechtliche Informationen"><Link href="/impressum">Impressum</Link><Link href="/datenschutz">Datenschutz</Link><Link href="/agb">AGB</Link><Link href="/widerruf">Widerruf</Link></nav></footer>
           </AuthProvider>
         </ThemeProvider>
       </body>

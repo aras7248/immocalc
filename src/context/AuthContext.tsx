@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
+import { isPublicRoute } from '@/lib/publicRoutes';
 import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 
@@ -33,7 +34,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       } else {
         setUser(null);
         // Force redirect to login if not already there
-        if (pathname !== '/login') {
+        if (!isPublicRoute(pathname)) {
           router.replace('/login');
         }
       }
@@ -52,7 +53,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           }
         } else {
           setUser(null);
-          if (pathname !== '/login') {
+          if (!isPublicRoute(pathname)) {
             router.replace('/login');
           }
         }
@@ -83,3 +84,4 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 };
 
 export const useAuth = () => useContext(AuthContext);
+

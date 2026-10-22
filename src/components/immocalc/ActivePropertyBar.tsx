@@ -6,6 +6,7 @@ import {
 import type { KeyboardEvent } from "react";
 
 interface ActivePropertyBarProps {
+  errors?: {livingArea?:string;purchasePrice?:string};
   objectName: string;
   livingArea: string;
   purchasePrice: string;
@@ -23,6 +24,7 @@ interface ActivePropertyBarProps {
 }
 
 export function ActivePropertyBar({
+  errors,
   objectName,
   livingArea,
   purchasePrice,
@@ -63,11 +65,12 @@ export function ActivePropertyBar({
           />
         </label>
         <label className="active-property__field">
-          <span>Wohnfläche</span>
+          <span>Wohnfläche</span>{errors?.livingArea && <small role="alert">{errors.livingArea}</small>}
           <span className="active-property__input-wrap">
             <input
               inputMode="decimal"
               type="text"
+              aria-invalid={Boolean(errors?.livingArea)}
               value={livingArea}
               onChange={(event) => onLivingAreaChange(event.target.value)}
               onBlur={onLivingAreaBlur}
@@ -77,11 +80,12 @@ export function ActivePropertyBar({
           </span>
         </label>
         <label className="active-property__field">
-          <span>Kaufpreis</span>
+          <span>Kaufpreis</span>{errors?.purchasePrice && <small role="alert">{errors.purchasePrice}</small>}
           <span className="active-property__input-wrap">
             <input
               inputMode="decimal"
               type="text"
+              aria-invalid={Boolean(errors?.purchasePrice)}
               value={purchasePrice}
               onChange={(event) => onPurchasePriceChange(event.target.value)}
               onBlur={onPurchasePriceBlur}
@@ -115,3 +119,4 @@ export function ActivePropertyBar({
     </section>
   );
 }
+

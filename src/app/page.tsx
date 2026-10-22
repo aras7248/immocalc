@@ -1,6 +1,9 @@
 "use client";
 
 import Image from "next/image";
+import { AppDialog } from "@/components/immocalc/AppDialog";
+import { useAppDialog } from "@/hooks/useAppDialog";
+import { validateFields } from "@/lib/validation";
 import { ProjectionPanel } from "@/components/immocalc/ProjectionPanel";
 import { useState, useEffect, useId, useRef } from "react";
 import { ActivePropertyBar } from '@/components/immocalc/ActivePropertyBar';
@@ -328,10 +331,14 @@ function describePriceLimit(result: ReverseCaseResult): string {
 }
 
 export default function Home() {
+  const { request: dialogRequest, close: closeDialog, notify, confirmAction, promptValue } = useAppDialog();
   // === STANDARD KALKULATION STATE ===
   const [calc, setCalc] = useState<CalcState>(initialCalcState);
   const [rev, setRev] = useState<ReverseState>(initialRevState);
 
+  const calcIssues = validateFields({...calc, maklerProzent:calc.hasMakler?calc.maklerProzent:'0'}, parseNumber);
+  const revIssues = validateFields({...rev, maklerProzent:rev.hasMakler?rev.maklerProzent:'0'}, parseNumber);
+  const criticalInputError = Boolean(calcIssues.wohnflaeche || calcIssues.kaufpreis || revIssues.wohnflaeche);
   const { user, signOut } = useAuth();
   const [mieten, setMieten] = useState<string[]>([""]);
   const [savedObjects, setSavedObjects] = useState<SavedObject[]>([]);
@@ -600,7 +607,7 @@ export default function Home() {
     const rawVal = calc[field];
     if (typeof rawVal === "string") {
       const val = parseNumber(rawVal);
-      updateCalc(field, formatAcc(Math.max(val, 0)));
+      if (!calcIssues[field]) updateCalc(field, formatAcc(val));
     }
   };
 
@@ -616,12 +623,12 @@ export default function Home() {
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      alert("Bitte wähle eine Bilddatei aus.");
+      void notify("Bitte wähle eine Bilddatei aus.");
       return;
     }
 
     if (file.size > 12 * 1024 * 1024) {
-      alert("Das Bild ist größer als 12 MB. Bitte verkleinere es vor dem Scan.");
+      void notify("Das Bild ist größer als 12 MB. Bitte verkleinere es vor dem Scan.");
       return;
     }
 
@@ -635,7 +642,7 @@ export default function Home() {
       processOcrText(text);
     } catch (error) {
       console.error("OCR Error:", error);
-      alert("Fehler bei der Texterkennung. Bitte versuche es mit einem klareren Bild.");
+      void notify("Fehler bei der Texterkennung. Bitte versuche es mit einem klareren Bild.");
     } finally {
       if (worker) await worker.terminate();
       setIsScanning(false);
@@ -670,7 +677,7 @@ export default function Home() {
     if (Object.keys(results).length > 0) {
       setScanResult(results);
     } else {
-      alert("Es konnten keine eindeutigen Daten erkannt werden. Bitte stelle sicher, dass Kaufpreis, Fläche oder Miete im Text sichtbar sind.");
+      void notify("Es konnten keine eindeutigen Daten erkannt werden. Bitte stelle sicher, dass Kaufpreis, Fläche oder Miete im Text sichtbar sind.");
     }
   };
 
@@ -777,7 +784,7 @@ export default function Home() {
     const rawVal = rev[field];
     if (typeof rawVal === "string") {
       const val = parseNumber(rawVal);
-      updateRev(field, formatAcc(Math.max(val, 0)));
+      if (!revIssues[field]) updateRev(field, formatAcc(val));
     }
   };
 
@@ -872,7 +879,7 @@ export default function Home() {
   const handleSaveObject = async () => {
     if (isSaving) return;
     if (!user) {
-      alert("Du musst eingeloggt sein, um Objekte speichern zu können.");
+      void notify("Du musst eingeloggt sein, um Objekte speichern zu können.");
       return;
     }
     
@@ -890,11 +897,11 @@ export default function Home() {
     let existingDbId: string | undefined = undefined;
 
     if (existingIndex !== -1) {
-      const wantOverwrite = window.confirm(`Ein Objekt mit dem Namen "${trimmedName}" existiert bereits.\n\nMöchtest du es überschreiben?\n(Klicke "Abbrechen", um eine Kopie unter neuem Namen zu speichern)`);
+      const wantOverwrite = await confirmAction(`Ein Objekt mit dem Namen "${trimmedName}" existiert bereits.\n\nMöchtest du es überschreiben?\n(Klicke "Abbrechen", um eine Kopie unter neuem Namen zu speichern)`);
       if (wantOverwrite) {
         existingDbId = savedObjects[existingIndex].db_id;
       } else {
-        const newName = window.prompt("Bitte gib einen neuen Namen für dieses Objekt ein:", trimmedName + " (Kopie)");
+        const newName = await promptValue("Bitte gib einen neuen Namen für dieses Objekt ein:", trimmedName + " (Kopie)");
         if (!newName || !newName.trim()) return;
         nameToSave = newName.trim();
         updateCalc("objektname", nameToSave);
@@ -955,7 +962,7 @@ export default function Home() {
       setIsObjektInfoOpen(false);
     } catch (e) {
       console.error("Speichern fehlgeschlagen:", e);
-      alert("Das Objekt konnte nicht gespeichert werden. Bitte prüfe deine Verbindung und versuche es erneut.");
+      void notify("Das Objekt konnte nicht gespeichert werden. Bitte prüfe deine Verbindung und versuche es erneut.");
     } finally {
       setIsSaving(false);
     }
@@ -974,8 +981,8 @@ export default function Home() {
     setScenarioCostInput(String(normalizeScenarioPercent(obj.scenarioCostIncreasePercent)));
   };
 
-  const handleClearData = () => {
-    if (window.confirm("Möchtest du wirklich alle eingegebenen Werte löschen?")) {
+  const handleClearData = async () => {
+    if (await confirmAction("Möchtest du wirklich alle eingegebenen Werte löschen?")) {
       setCalc(emptyCalcState);
       setRev(emptyRevState);
       setSyncedFields({});
@@ -992,7 +999,7 @@ export default function Home() {
   const handleDeleteObject = async (id: string) => {
     const obj = savedObjects.find(o => o.id === id);
     if (obj?.db_id && user) {
-      const shouldDelete = window.confirm(`Möchtest du „${obj.calc.objektname || "Unbenanntes Objekt"}“ wirklich löschen?`);
+      const shouldDelete = await confirmAction(`Möchtest du „${obj.calc.objektname || "Unbenanntes Objekt"}“ wirklich löschen?`);
       if (!shouldDelete) return;
 
       const { error } = await supabase
@@ -1003,7 +1010,7 @@ export default function Home() {
 
       if (error) {
         console.error("Löschen fehlgeschlagen:", error);
-        alert("Das Objekt konnte nicht gelöscht werden. Bitte versuche es erneut.");
+        void notify("Das Objekt konnte nicht gelöscht werden. Bitte versuche es erneut.");
         return;
       }
     }
@@ -1012,6 +1019,8 @@ export default function Home() {
 
   return (
     <div className="app-container">
+      {dialogRequest && <AppDialog request={dialogRequest} onClose={closeDialog} />}
+      {criticalInputError && <p role="alert" className="validation-message">Bitte korrigiere Kaufpreis und Wohnfläche. Die Ergebnisanzeige ist bis dahin ausgeblendet.</p>}
       {/* ═══ TOP BAR — eigenständige ImmoCalc-App im gemeinsamen Designsystem ═══ */}
       <header className="app-topbar">
         <div className="app-brand">
@@ -1133,13 +1142,15 @@ export default function Home() {
             <div className="input-group input-optional">
               <label htmlFor="unit-count">Anzahl Einheiten</label>
               <div className="input-wrapper">
-                <input id="unit-count" inputMode="numeric" type="text" value={calc.anzahlEinheiten} onChange={(e) => updateCalc("anzahlEinheiten", e.target.value)} placeholder="z.B. 3" onKeyDown={handleEnterKey} />
+                <input id="unit-count" inputMode="numeric" type="text" value={calc.anzahlEinheiten} onChange={(e) => updateCalc("anzahlEinheiten", e.target.value)} placeholder="z.B. 3" onKeyDown={handleEnterKey}  aria-invalid={Boolean(calcIssues.anzahlEinheiten)} />
+{calcIssues.anzahlEinheiten && <small role="alert" className="validation-message">{calcIssues.anzahlEinheiten}</small>}
               </div>
             </div>
             <div className="input-group input-optional">
               <label htmlFor="construction-year">Baujahr</label>
               <div className="input-wrapper">
-                <input id="construction-year" inputMode="numeric" type="text" value={calc.baujahr} onChange={(e) => updateCalc("baujahr", e.target.value)} onKeyDown={handleEnterKey} />
+                <input id="construction-year" inputMode="numeric" type="text" value={calc.baujahr} onChange={(e) => updateCalc("baujahr", e.target.value)} onKeyDown={handleEnterKey}  aria-invalid={Boolean(calcIssues.baujahr)} />
+{calcIssues.baujahr && <small role="alert" className="validation-message">{calcIssues.baujahr}</small>}
               </div>
             </div>
           </div>
@@ -1218,6 +1229,7 @@ export default function Home() {
         <button type="button" onClick={()=>setLocationSuggestion(null)}>Verwerfen</button>
       </div>}
       <ActivePropertyBar
+        errors={{livingArea:calcIssues.wohnflaeche,purchasePrice:calcIssues.kaufpreis}}
         objectName={calc.objektname}
         livingArea={calc.wohnflaeche}
         purchasePrice={calc.kaufpreis}
@@ -1246,7 +1258,7 @@ export default function Home() {
           }}
           onUnlock={handlePremiumUnlock}
         />
-        <ProjectionPanel input={standardResult.input} />
+        {!criticalInputError && <ProjectionPanel input={standardResult.input} />}
         </>
       )}
 
@@ -1268,7 +1280,8 @@ export default function Home() {
                   <div className="input-group input-required">
                     <label htmlFor="purchase-price">Kaufpreis</label>
                     <div className="input-wrapper">
-                      <input id="purchase-price" inputMode="decimal" type="text" value={calc.kaufpreis} onChange={(e) => updateCalc("kaufpreis", e.target.value)} onBlur={() => handleBlurCalc("kaufpreis")} onKeyDown={handleEnterKey} required aria-required="true" />
+                      <input id="purchase-price" inputMode="decimal" type="text" value={calc.kaufpreis} onChange={(e) => updateCalc("kaufpreis", e.target.value)} onBlur={() => handleBlurCalc("kaufpreis")} onKeyDown={handleEnterKey} required aria-required="true"  aria-invalid={Boolean(calcIssues.kaufpreis)} />
+{calcIssues.kaufpreis && <small role="alert" className="validation-message">{calcIssues.kaufpreis}</small>}
                       <span className="input-suffix">€</span>
                     </div>
                   </div>
@@ -1276,7 +1289,8 @@ export default function Home() {
                   <div className="input-group input-required">
                     <label htmlFor="living-area">Wohnfläche</label>
                     <div className="input-wrapper">
-                      <input id="living-area" inputMode="decimal" type="text" value={calc.wohnflaeche} onChange={(e) => updateCalc("wohnflaeche", e.target.value)} onBlur={() => handleBlurCalc("wohnflaeche")} onKeyDown={handleEnterKey} required aria-required="true" />
+                      <input id="living-area" inputMode="decimal" type="text" value={calc.wohnflaeche} onChange={(e) => updateCalc("wohnflaeche", e.target.value)} onBlur={() => handleBlurCalc("wohnflaeche")} onKeyDown={handleEnterKey} required aria-required="true"  aria-invalid={Boolean(calcIssues.wohnflaeche)} />
+{calcIssues.wohnflaeche && <small role="alert" className="validation-message">{calcIssues.wohnflaeche}</small>}
                       <span className="input-suffix">m²</span>
                     </div>
                   </div>
@@ -1332,7 +1346,8 @@ export default function Home() {
                           background: isNotarLocked ? 'var(--bg-color)' : 'var(--input-optional-bg)'
                         }}
                         onKeyDown={handleEnterKey}
-                      />
+                       aria-invalid={Boolean(calcIssues.notarProzent)} />
+{calcIssues.notarProzent && <small role="alert" className="validation-message">{calcIssues.notarProzent}</small>}
                       <button
                         onClick={() => setIsNotarLocked(!isNotarLocked)}
                         style={{
@@ -1357,7 +1372,8 @@ export default function Home() {
                       Maklerprovision
                     </label>
                     <div className="input-wrapper" style={{ opacity: calc.hasMakler ? 1 : 0.5, pointerEvents: calc.hasMakler ? 'auto' : 'none' }}>
-                      <input id="broker-percent" aria-label="Maklerprovision in Prozent" inputMode="decimal" type="text" value={calc.maklerProzent} onChange={(e) => updateCalc("maklerProzent", e.target.value)} onBlur={() => handleBlurCalc("maklerProzent")} onKeyDown={handleEnterKey} />
+                      <input id="broker-percent" aria-label="Maklerprovision in Prozent" inputMode="decimal" type="text" value={calc.maklerProzent} onChange={(e) => updateCalc("maklerProzent", e.target.value)} onBlur={() => handleBlurCalc("maklerProzent")} onKeyDown={handleEnterKey}  aria-invalid={Boolean(calcIssues.maklerProzent)} />
+{calcIssues.maklerProzent && <small role="alert" className="validation-message">{calcIssues.maklerProzent}</small>}
                       <span className="input-suffix">%</span>
                     </div>
                   </div>
@@ -1387,7 +1403,8 @@ export default function Home() {
                         readOnly={isMietenRechnerOpen}
                         style={{ background: isMietenRechnerOpen ? 'var(--bg-color)' : '', opacity: isMietenRechnerOpen ? 0.7 : 1 }}
                         onKeyDown={handleEnterKey}
-                      />
+                       aria-invalid={Boolean(calcIssues.mietePM)} />
+{calcIssues.mietePM && <small role="alert" className="validation-message">{calcIssues.mietePM}</small>}
                       <span className="input-suffix">€</span>
                     </div>
                   </div>
@@ -1405,7 +1422,8 @@ export default function Home() {
                         readOnly={isMietenRechnerOpen}
                         style={{ background: isMietenRechnerOpen ? 'var(--bg-color)' : '', opacity: isMietenRechnerOpen ? 0.7 : 1 }}
                         onKeyDown={handleEnterKey}
-                      />
+                       aria-invalid={Boolean(calcIssues.mietePA)} />
+{calcIssues.mietePA && <small role="alert" className="validation-message">{calcIssues.mietePA}</small>}
                       <span className="input-suffix">€</span>
                     </div>
                   </div>
@@ -1526,21 +1544,24 @@ export default function Home() {
                   </div>
                 )}
 
-<div className="input-group input-optional"><label htmlFor="calc-movable">Mitverkaufte bewegliche Gegenstände (€)</label><input id="calc-movable" type="text" inputMode="decimal" value={calc.movableItemsAmount} onChange={e=>updateCalc('movableItemsAmount',e.target.value)}/><small>Nur angemessen bewertete, separat ausgewiesene Gegenstände, z. B. eine gebrauchte Küche. Abzug ausschließlich bei der Grunderwerbsteuer. Notar/Grundbuch (Standard 2 %) und Makler werden hier weiter auf den Gesamtpreis berechnet; tatsächliche Vereinbarungen und Gebühren können abweichen.</small></div><p className="field-note">Makler: Trage deinen vereinbarten Käuferanteil ein. §§ 656b–656d BGB enthalten besondere Regeln für Verbraucherkäufe von Wohnungen und Einfamilienhäusern; bei anderen Objektarten kann die Verteilung abweichen.</p>
+<div className="input-group input-optional"><label htmlFor="calc-movable">Mitverkaufte bewegliche Gegenstände (€)</label><input id="calc-movable" type="text" inputMode="decimal" value={calc.movableItemsAmount} onChange={e=>updateCalc('movableItemsAmount',e.target.value)} aria-invalid={Boolean(calcIssues.movableItemsAmount)} />
+{calcIssues.movableItemsAmount && <small role="alert" className="validation-message">{calcIssues.movableItemsAmount}</small>}<small>Nur angemessen bewertete, separat ausgewiesene Gegenstände, z. B. eine gebrauchte Küche. Abzug ausschließlich bei der Grunderwerbsteuer. Notar/Grundbuch (Standard 2 %) und Makler werden hier weiter auf den Gesamtpreis berechnet; tatsächliche Vereinbarungen und Gebühren können abweichen.</small></div><p className="field-note">Makler: Trage deinen vereinbarten Käuferanteil ein. §§ 656b–656d BGB enthalten besondere Regeln für Verbraucherkäufe von Wohnungen und Einfamilienhäusern; bei anderen Objektarten kann die Verteilung abweichen.</p>
                 <h3 className="cluster-title">4. Laufende, nicht umlagefähige Kosten</h3>
                 <div className="calculation-row">
                   <div className="input-group input-optional">
                     <label htmlFor="maintenance-monthly">Instandhaltung / m² / Monat</label>
                     <small>Ansatz für laufende Reparaturen. Bereits hier erfasste Beträge nicht nochmals als Rücklage eintragen.</small>
                     <div className="input-wrapper">
-                      <input id="maintenance-monthly" inputMode="decimal" type="text" value={calc.instandhaltungQm} onChange={(e) => updateCalc("instandhaltungQm", e.target.value)} onBlur={() => handleBlurCalc("instandhaltungQm")} onKeyDown={handleEnterKey} />
+                      <input id="maintenance-monthly" inputMode="decimal" type="text" value={calc.instandhaltungQm} onChange={(e) => updateCalc("instandhaltungQm", e.target.value)} onBlur={() => handleBlurCalc("instandhaltungQm")} onKeyDown={handleEnterKey}  aria-invalid={Boolean(calcIssues.instandhaltungQm)} />
+{calcIssues.instandhaltungQm && <small role="alert" className="validation-message">{calcIssues.instandhaltungQm}</small>}
                       <span className="input-suffix">€</span>
                     </div>
                   </div>
                   <div className="input-group input-optional">
                     <label htmlFor="management-monthly">Verwaltung / Monat</label>
                     <div className="input-wrapper">
-                      <input id="management-monthly" inputMode="decimal" type="text" value={calc.verwaltungPm} onChange={(e) => updateCalc("verwaltungPm", e.target.value)} onBlur={() => handleBlurCalc("verwaltungPm")} onKeyDown={handleEnterKey} />
+                      <input id="management-monthly" inputMode="decimal" type="text" value={calc.verwaltungPm} onChange={(e) => updateCalc("verwaltungPm", e.target.value)} onBlur={() => handleBlurCalc("verwaltungPm")} onKeyDown={handleEnterKey}  aria-invalid={Boolean(calcIssues.verwaltungPm)} />
+{calcIssues.verwaltungPm && <small role="alert" className="validation-message">{calcIssues.verwaltungPm}</small>}
                       <span className="input-suffix">€</span>
                     </div>
                   </div>
@@ -1548,7 +1569,8 @@ export default function Home() {
                     <label htmlFor="reserve-monthly">Rücklage / Monat</label>
                     <small>Zusätzliche Liquiditätsreserve für künftige Maßnahmen, ohne die bereits angesetzte Instandhaltung. Mindert den verfügbaren Cashflow.</small>
                     <div className="input-wrapper">
-                      <input id="reserve-monthly" inputMode="decimal" type="text" value={calc.ruecklagePm} onChange={(e) => updateCalc("ruecklagePm", e.target.value)} onBlur={() => handleBlurCalc("ruecklagePm")} onKeyDown={handleEnterKey} />
+                      <input id="reserve-monthly" inputMode="decimal" type="text" value={calc.ruecklagePm} onChange={(e) => updateCalc("ruecklagePm", e.target.value)} onBlur={() => handleBlurCalc("ruecklagePm")} onKeyDown={handleEnterKey}  aria-invalid={Boolean(calcIssues.ruecklagePm)} />
+{calcIssues.ruecklagePm && <small role="alert" className="validation-message">{calcIssues.ruecklagePm}</small>}
                       <span className="input-suffix">€</span>
                     </div>
                   </div>
@@ -1558,6 +1580,7 @@ export default function Home() {
                     <label htmlFor="vacancy-percent">Mietausfall / Leerstand</label>
                     <div className="input-wrapper">
                       <input id="vacancy-percent" inputMode="decimal" type="text" value={calc.vacancyPercent} onChange={(e) => updateCalc("vacancyPercent", e.target.value)} aria-describedby="vacancy-percent-help" aria-invalid={parseNumber(calc.vacancyPercent) < 0 || parseNumber(calc.vacancyPercent) > 100} />
+{calcIssues.vacancyPercent && <small role="alert" className="validation-message">{calcIssues.vacancyPercent}</small>}
                       <span className="input-suffix">%</span>
                     </div>
                     <small id="vacancy-percent-help">0 bis 100 % der Soll-Jahresmiete. Bruttorendite und Kaufpreisfaktor verwenden weiterhin die Soll-Miete.</small>
@@ -1578,6 +1601,7 @@ export default function Home() {
                     <label htmlFor="standard-equity-percent">Eigenkapital im Kaufpreis</label>
                     <div className="input-wrapper">
                       <input id="standard-equity-percent" type="text" inputMode="decimal" value={calc.equityPercentOfPrice} onChange={(e) => updateCalc("equityPercentOfPrice", e.target.value)} onBlur={() => updateCalc("equityPercentOfPrice", formatAcc(normalizeEquityPercent(parseNumber(calc.equityPercentOfPrice))))} onKeyDown={handleEnterKey} aria-describedby="standard-equity-help" aria-invalid={parseNumber(calc.equityPercentOfPrice) < 0 || parseNumber(calc.equityPercentOfPrice) > 100} />
+{calcIssues.equityPercentOfPrice && <small role="alert" className="validation-message">{calcIssues.equityPercentOfPrice}</small>}
                       <span className="input-suffix">%</span>
                     </div>
                     <small id="standard-equity-help">0 bis 100 % des Kaufpreises, zusätzlich zu den vollständig aus Eigenkapital bezahlten Kaufnebenkosten.</small>
@@ -1585,7 +1609,8 @@ export default function Home() {
                   <div className="input-group input-optional">
                     <label htmlFor="standard-fixed-interest-years">Zinsbindung (optional)</label>
                     <div className="input-wrapper">
-                      <input id="standard-fixed-interest-years" type="text" inputMode="numeric" value={calc.fixedInterestYears} onChange={(e) => updateCalc("fixedInterestYears", e.target.value)} onBlur={() => updateCalc("fixedInterestYears", String(normalizeFixedInterestYears(parseNumber(calc.fixedInterestYears)) ?? ""))} onKeyDown={handleEnterKey} aria-describedby="standard-fixed-interest-help" />
+                      <input id="standard-fixed-interest-years" type="text" inputMode="numeric" value={calc.fixedInterestYears} onChange={(e) => updateCalc("fixedInterestYears", e.target.value)} onBlur={() => updateCalc("fixedInterestYears", String(normalizeFixedInterestYears(parseNumber(calc.fixedInterestYears)) ?? ""))} onKeyDown={handleEnterKey} aria-describedby="standard-fixed-interest-help"  aria-invalid={Boolean(calcIssues.fixedInterestYears)} />
+{calcIssues.fixedInterestYears && <small role="alert" className="validation-message">{calcIssues.fixedInterestYears}</small>}
                       <span className="input-suffix">Jahre</span>
                     </div>
                     <small id="standard-fixed-interest-help">1 bis 30 volle Jahre. Die Zinsbindung wird gespeichert; die angezeigten Kennzahlen beziehen sich auf das erste Jahr.</small>
@@ -1596,14 +1621,16 @@ export default function Home() {
                   <div className="input-group input-optional">
                     <label htmlFor="interest-percent">Zins</label>
                     <div className="input-wrapper">
-                      <input id="interest-percent" inputMode="decimal" type="text" value={calc.zins} onChange={(e) => updateCalc("zins", e.target.value)} onBlur={() => handleBlurCalc("zins")} onKeyDown={handleEnterKey} />
+                      <input id="interest-percent" inputMode="decimal" type="text" value={calc.zins} onChange={(e) => updateCalc("zins", e.target.value)} onBlur={() => handleBlurCalc("zins")} onKeyDown={handleEnterKey}  aria-invalid={Boolean(calcIssues.zins)} />
+{calcIssues.zins && <small role="alert" className="validation-message">{calcIssues.zins}</small>}
                       <span className="input-suffix">%</span>
                     </div>
                   </div>
                   <div className="input-group input-optional">
                     <label htmlFor="repayment-percent">Tilgung</label>
                     <div className="input-wrapper">
-                      <input id="repayment-percent" inputMode="decimal" type="text" value={calc.tilgung} onChange={(e) => updateCalc("tilgung", e.target.value)} onBlur={() => handleBlurCalc("tilgung")} onKeyDown={handleEnterKey} />
+                      <input id="repayment-percent" inputMode="decimal" type="text" value={calc.tilgung} onChange={(e) => updateCalc("tilgung", e.target.value)} onBlur={() => handleBlurCalc("tilgung")} onKeyDown={handleEnterKey}  aria-invalid={Boolean(calcIssues.tilgung)} />
+{calcIssues.tilgung && <small role="alert" className="validation-message">{calcIssues.tilgung}</small>}
                       <span className="input-suffix">%</span>
                     </div>
                   </div>
@@ -1620,7 +1647,7 @@ export default function Home() {
             icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>}
             badge={`${formatAcc(roe)}% CoC`}
           >
-            <section className="results-sticky">
+            <section className="results-sticky" hidden={criticalInputError}>
               <div className="glass-panel" style={{ padding: '1rem', background: 'var(--output-calc-bg)', border: 'none', borderRadius: 0, boxShadow: 'none' }}>
                 <div style={{ position: 'relative', marginBottom: '1.5rem', borderBottom: '1px solid var(--output-calc-border)', paddingBottom: '0.75rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.25rem' }}>
@@ -1961,7 +1988,8 @@ export default function Home() {
                         placeholder="Fläche"
                         value={calc.wohnflaeche}
                         onChange={(e) => updateCalc("wohnflaeche", e.target.value)}
-                      />
+                       aria-invalid={Boolean(calcIssues.wohnflaeche)} />
+{calcIssues.wohnflaeche && <small role="alert" className="validation-message">{calcIssues.wohnflaeche}</small>}
                       <span style={{ fontSize: '0.8rem' }}>m² ×</span>
                       <input
                         aria-label="Mietpreis pro Quadratmeter für Mietpotenzial"
@@ -1970,7 +1998,8 @@ export default function Home() {
                         placeholder="€/m²"
                         value={rev.zielMietpreisQm}
                         onChange={(e) => updateRev("zielMietpreisQm", e.target.value)}
-                      />
+                       aria-invalid={Boolean(revIssues.zielMietpreisQm)} />
+{revIssues.zielMietpreisQm && <small role="alert" className="validation-message">{revIssues.zielMietpreisQm}</small>}
                       <span style={{ fontSize: '0.8rem' }}>=</span>
                       <output aria-label="Monatliche Kaltmiete" style={{ fontSize: '0.9rem', color: 'var(--text-main)', fontWeight: 800 }}>{formatAcc(quickRentPotential)} € / Monat</output>
                     </div>
@@ -2004,14 +2033,16 @@ export default function Home() {
                     <div className="input-group input-required">
                       <label htmlFor="target-rent-sqm">Miete / m² (Ziel)</label>
                       <div className={`input-wrapper ${isFlashActive ? 'flash-update' : ''} ${syncedFields.zielMietpreisQm ? 'input-synced' : ''}`} style={{ border: '1px solid var(--accent-color)', borderRadius: '8px' }}>
-                        <input id="target-rent-sqm" inputMode="decimal" type="text" value={rev.zielMietpreisQm} onChange={(e) => updateRev("zielMietpreisQm", e.target.value)} onBlur={() => handleBlurRev("zielMietpreisQm")} onKeyDown={handleEnterKey} style={{ fontWeight: 700, color: syncedFields.zielMietpreisQm ? 'var(--success-color)' : 'var(--accent-color)' }} />
+                        <input id="target-rent-sqm" inputMode="decimal" type="text" value={rev.zielMietpreisQm} onChange={(e) => updateRev("zielMietpreisQm", e.target.value)} onBlur={() => handleBlurRev("zielMietpreisQm")} onKeyDown={handleEnterKey} style={{ fontWeight: 700, color: syncedFields.zielMietpreisQm ? 'var(--success-color)' : 'var(--accent-color)' }}  aria-invalid={Boolean(revIssues.zielMietpreisQm)} />
+{revIssues.zielMietpreisQm && <small role="alert" className="validation-message">{revIssues.zielMietpreisQm}</small>}
                         <span className="input-suffix">€</span>
                       </div>
                     </div>
                     <div className="input-group input-required">
                       <label htmlFor="target-annual-rent">Kaltmiete / p.a. (Ziel)</label>
                       <div className={`input-wrapper ${isFlashActive ? 'flash-update' : ''} ${syncedFields.zielMietePA ? 'input-synced' : ''}`}>
-                        <input id="target-annual-rent" inputMode="decimal" type="text" value={rev.zielMietePA} onChange={(e) => updateRev("zielMietePA", e.target.value)} onBlur={() => handleBlurRev("zielMietePA")} onKeyDown={handleEnterKey} />
+                        <input id="target-annual-rent" inputMode="decimal" type="text" value={rev.zielMietePA} onChange={(e) => updateRev("zielMietePA", e.target.value)} onBlur={() => handleBlurRev("zielMietePA")} onKeyDown={handleEnterKey}  aria-invalid={Boolean(revIssues.zielMietePA)} />
+{revIssues.zielMietePA && <small role="alert" className="validation-message">{revIssues.zielMietePA}</small>}
                         <span className="input-suffix">€</span>
                       </div>
                     </div>
@@ -2057,7 +2088,9 @@ export default function Home() {
                     <div className="input-group input-optional">
                       <label htmlFor="reverse-notary-percent">Notar (Fixiert)</label>
                       <div className={`input-wrapper ${isFlashActive ? 'flash-update' : ''} ${syncedFields.notarProzent ? 'input-synced' : ''}`}>
-                        <input id="reverse-notary-percent" type="text" value={rev.notarProzent} readOnly style={{ opacity: 0.7, background: 'var(--bg-color)' }} />
+                        <input id="reverse-notary-percent" type="text" value={rev.notarProzent} readOnly style={{ opacity: 0.7, background: 'var(--bg-color)' }}  aria-invalid={Boolean(revIssues.notarProzent)} />
+{revIssues.notarProzent && <small role="alert" className="validation-message">{revIssues.notarProzent}</small>}
+                      {revIssues.notarProzent && <small role="alert" className="validation-message">{revIssues.notarProzent}</small>}
                         <span className="input-suffix">%</span>
                       </div>
                     </div>
@@ -2068,7 +2101,8 @@ export default function Home() {
                         Maklerprovision
                       </label>
                       <div className={`input-wrapper ${isFlashActive ? 'flash-update' : ''} ${syncedFields.maklerProzent ? 'input-synced' : ''}`} style={{ opacity: rev.hasMakler ? 1 : 0.5, pointerEvents: rev.hasMakler ? 'auto' : 'none' }}>
-                        <input id="reverse-broker-percent" aria-label="Maklerprovision in Prozent" inputMode="decimal" type="text" value={rev.maklerProzent} onChange={(e) => updateRev("maklerProzent", e.target.value)} onBlur={() => handleBlurRev("maklerProzent")} onKeyDown={handleEnterKey} />
+                        <input id="reverse-broker-percent" aria-label="Maklerprovision in Prozent" inputMode="decimal" type="text" value={rev.maklerProzent} onChange={(e) => updateRev("maklerProzent", e.target.value)} onBlur={() => handleBlurRev("maklerProzent")} onKeyDown={handleEnterKey}  aria-invalid={Boolean(revIssues.maklerProzent)} />
+{revIssues.maklerProzent && <small role="alert" className="validation-message">{revIssues.maklerProzent}</small>}
                         <span className="input-suffix">%</span>
                       </div>
                     </div>
@@ -2082,13 +2116,15 @@ export default function Home() {
                     </div>
                   </div>
 
-<div className="input-group input-optional"><label htmlFor="rev-movable">Mitverkaufte bewegliche Gegenstände (€)</label><input id="rev-movable" type="text" inputMode="decimal" value={rev.movableItemsAmount} onChange={e=>updateRev('movableItemsAmount',e.target.value)}/><small>Nur angemessen bewertete, separat ausgewiesene Gegenstände, z. B. eine gebrauchte Küche. Abzug ausschließlich bei der Grunderwerbsteuer. Notar/Grundbuch (Standard 2 %) und Makler werden hier weiter auf den Gesamtpreis berechnet; tatsächliche Vereinbarungen und Gebühren können abweichen.</small></div><p className="field-note">Makler: Trage deinen vereinbarten Käuferanteil ein. §§ 656b–656d BGB enthalten besondere Regeln für Verbraucherkäufe von Wohnungen und Einfamilienhäusern; bei anderen Objektarten kann die Verteilung abweichen.</p>
+<div className="input-group input-optional"><label htmlFor="rev-movable">Mitverkaufte bewegliche Gegenstände (€)</label><input id="rev-movable" type="text" inputMode="decimal" value={rev.movableItemsAmount} onChange={e=>updateRev('movableItemsAmount',e.target.value)} aria-invalid={Boolean(revIssues.movableItemsAmount)} />
+{revIssues.movableItemsAmount && <small role="alert" className="validation-message">{revIssues.movableItemsAmount}</small>}<small>Nur angemessen bewertete, separat ausgewiesene Gegenstände, z. B. eine gebrauchte Küche. Abzug ausschließlich bei der Grunderwerbsteuer. Notar/Grundbuch (Standard 2 %) und Makler werden hier weiter auf den Gesamtpreis berechnet; tatsächliche Vereinbarungen und Gebühren können abweichen.</small></div><p className="field-note">Makler: Trage deinen vereinbarten Käuferanteil ein. §§ 656b–656d BGB enthalten besondere Regeln für Verbraucherkäufe von Wohnungen und Einfamilienhäusern; bei anderen Objektarten kann die Verteilung abweichen.</p>
                   <div className="calculation-row">
                     <div className="input-group input-optional">
                       <label htmlFor="reverse-maintenance">Instandhaltung / m² / Monat</label>
                     <small>Ansatz für laufende Reparaturen. Bereits hier erfasste Beträge nicht nochmals als Rücklage eintragen.</small>
                       <div className="input-wrapper">
-                        <input id="reverse-maintenance" inputMode="decimal" type="text" value={rev.instandhaltungQm} onChange={(e) => updateRev("instandhaltungQm", e.target.value)} onBlur={() => handleBlurRev("instandhaltungQm")} onKeyDown={handleEnterKey} />
+                        <input id="reverse-maintenance" inputMode="decimal" type="text" value={rev.instandhaltungQm} onChange={(e) => updateRev("instandhaltungQm", e.target.value)} onBlur={() => handleBlurRev("instandhaltungQm")} onKeyDown={handleEnterKey}  aria-invalid={Boolean(revIssues.instandhaltungQm)} />
+{revIssues.instandhaltungQm && <small role="alert" className="validation-message">{revIssues.instandhaltungQm}</small>}
                         <span className="input-suffix">€</span>
                       </div>
                     </div>
@@ -2096,7 +2132,8 @@ export default function Home() {
                     <div className="input-group input-optional">
                       <label htmlFor="reverse-management">Hausverwaltung / Monat</label>
                       <div className="input-wrapper">
-                        <input id="reverse-management" inputMode="decimal" type="text" value={rev.verwaltungPm} onChange={(e) => updateRev("verwaltungPm", e.target.value)} onBlur={() => handleBlurRev("verwaltungPm")} onKeyDown={handleEnterKey} />
+                        <input id="reverse-management" inputMode="decimal" type="text" value={rev.verwaltungPm} onChange={(e) => updateRev("verwaltungPm", e.target.value)} onBlur={() => handleBlurRev("verwaltungPm")} onKeyDown={handleEnterKey}  aria-invalid={Boolean(revIssues.verwaltungPm)} />
+{revIssues.verwaltungPm && <small role="alert" className="validation-message">{revIssues.verwaltungPm}</small>}
                         <span className="input-suffix">€</span>
                       </div>
                     </div>
@@ -2105,7 +2142,8 @@ export default function Home() {
                       <label htmlFor="reverse-reserve">Rücklage / Monat</label>
                     <small>Zusätzliche Liquiditätsreserve für künftige Maßnahmen, ohne die bereits angesetzte Instandhaltung. Mindert den verfügbaren Cashflow.</small>
                       <div className="input-wrapper">
-                        <input id="reverse-reserve" inputMode="decimal" type="text" value={rev.ruecklagePm} onChange={(e) => updateRev("ruecklagePm", e.target.value)} onBlur={() => handleBlurRev("ruecklagePm")} onKeyDown={handleEnterKey} />
+                        <input id="reverse-reserve" inputMode="decimal" type="text" value={rev.ruecklagePm} onChange={(e) => updateRev("ruecklagePm", e.target.value)} onBlur={() => handleBlurRev("ruecklagePm")} onKeyDown={handleEnterKey}  aria-invalid={Boolean(revIssues.ruecklagePm)} />
+{revIssues.ruecklagePm && <small role="alert" className="validation-message">{revIssues.ruecklagePm}</small>}
                         <span className="input-suffix">€</span>
                       </div>
                     </div>
@@ -2115,6 +2153,7 @@ export default function Home() {
                     <label htmlFor="reverse-vacancy-percent">Mietausfall / Leerstand</label>
                     <div className="input-wrapper">
                       <input id="reverse-vacancy-percent" inputMode="decimal" type="text" value={rev.vacancyPercent} onChange={(e) => updateRev("vacancyPercent", e.target.value)} aria-describedby="reverse-vacancy-percent-help" aria-invalid={parseNumber(rev.vacancyPercent) < 0 || parseNumber(rev.vacancyPercent) > 100} />
+{revIssues.vacancyPercent && <small role="alert" className="validation-message">{revIssues.vacancyPercent}</small>}
                       <span className="input-suffix">%</span>
                     </div>
                     <small id="reverse-vacancy-percent-help">0 bis 100 % der Soll-Jahresmiete. Bruttorendite und Kaufpreisfaktor verwenden weiterhin die Soll-Miete.</small>
@@ -2125,6 +2164,7 @@ export default function Home() {
                     <label htmlFor="reverse-equity-percent">Eigenkapital im Kaufpreis</label>
                     <div className="input-wrapper">
                       <input id="reverse-equity-percent" type="text" inputMode="decimal" value={rev.equityPercentOfPrice} onChange={(e) => updateRev("equityPercentOfPrice", e.target.value)} onBlur={() => updateRev("equityPercentOfPrice", formatAcc(normalizeEquityPercent(parseNumber(rev.equityPercentOfPrice))))} onKeyDown={handleEnterKey} aria-describedby="reverse-equity-help" aria-invalid={parseNumber(rev.equityPercentOfPrice) < 0 || parseNumber(rev.equityPercentOfPrice) > 100} />
+{revIssues.equityPercentOfPrice && <small role="alert" className="validation-message">{revIssues.equityPercentOfPrice}</small>}
                       <span className="input-suffix">%</span>
                     </div>
                     <small id="reverse-equity-help">0 bis 100 % des Kaufpreises, zusätzlich zu den vollständig aus Eigenkapital bezahlten Kaufnebenkosten.</small>
@@ -2132,7 +2172,8 @@ export default function Home() {
                   <div className="input-group input-optional">
                     <label htmlFor="reverse-fixed-interest-years">Zinsbindung (optional)</label>
                     <div className="input-wrapper">
-                      <input id="reverse-fixed-interest-years" type="text" inputMode="numeric" value={rev.fixedInterestYears} onChange={(e) => updateRev("fixedInterestYears", e.target.value)} onBlur={() => updateRev("fixedInterestYears", String(normalizeFixedInterestYears(parseNumber(rev.fixedInterestYears)) ?? ""))} onKeyDown={handleEnterKey} aria-describedby="reverse-fixed-interest-help" />
+                      <input id="reverse-fixed-interest-years" type="text" inputMode="numeric" value={rev.fixedInterestYears} onChange={(e) => updateRev("fixedInterestYears", e.target.value)} onBlur={() => updateRev("fixedInterestYears", String(normalizeFixedInterestYears(parseNumber(rev.fixedInterestYears)) ?? ""))} onKeyDown={handleEnterKey} aria-describedby="reverse-fixed-interest-help"  aria-invalid={Boolean(revIssues.fixedInterestYears)} />
+{revIssues.fixedInterestYears && <small role="alert" className="validation-message">{revIssues.fixedInterestYears}</small>}
                       <span className="input-suffix">Jahre</span>
                     </div>
                     <small id="reverse-fixed-interest-help">1 bis 30 volle Jahre. Die Zinsbindung wird gespeichert; die angezeigten Kennzahlen beziehen sich auf das erste Jahr.</small>
@@ -2140,13 +2181,16 @@ export default function Home() {
                 </div>
                   <div className="calculation-row" aria-label="Ziel der Rückwärtsrechnung">
                     <label>Zielart<select value={rev.targetMode} onChange={e=>updateRev('targetMode',e.target.value)}><option value="cashflow">Cashflow vor Steuern</option><option value="yield">Nettorendite vor Steuern</option></select></label>
-                    {rev.targetMode === 'yield' ? <label>Ziel-Nettorendite (%)<input type="text" inputMode="decimal" value={rev.targetNetYieldPercent} onChange={e=>updateRev('targetNetYieldPercent',e.target.value)}/></label> : <label>Ziel-Cashflow pro Jahr (€)<input type="text" inputMode="decimal" value={rev.targetCashFlowAnnual} onChange={e=>updateRev('targetCashFlowAnnual',e.target.value)}/></label>}
+                    {rev.targetMode === 'yield' ? <label>Ziel-Nettorendite (%)<input type="text" inputMode="decimal" value={rev.targetNetYieldPercent} onChange={e=>updateRev('targetNetYieldPercent',e.target.value)} aria-invalid={Boolean(revIssues.targetNetYieldPercent)} />
+{revIssues.targetNetYieldPercent && <small role="alert" className="validation-message">{revIssues.targetNetYieldPercent}</small>}</label> : <label>Ziel-Cashflow pro Jahr (€)<input type="text" inputMode="decimal" value={rev.targetCashFlowAnnual} onChange={e=>updateRev('targetCashFlowAnnual',e.target.value)} aria-invalid={Boolean(revIssues.targetCashFlowAnnual)} />
+{revIssues.targetCashFlowAnnual && <small role="alert" className="validation-message">{revIssues.targetCashFlowAnnual}</small>}</label>}
                   </div>
                   <div className="calculation-row">
                     <div className="input-group input-optional">
                       <label htmlFor="reverse-interest">Zins</label>
                       <div className={`input-wrapper ${isFlashActive ? 'flash-update' : ''} ${syncedFields.zins ? 'input-synced' : ''}`}>
-                        <input id="reverse-interest" inputMode="decimal" type="text" value={rev.zins} onChange={(e) => updateRev("zins", e.target.value)} onBlur={() => handleBlurRev("zins")} onKeyDown={handleEnterKey} />
+                        <input id="reverse-interest" inputMode="decimal" type="text" value={rev.zins} onChange={(e) => updateRev("zins", e.target.value)} onBlur={() => handleBlurRev("zins")} onKeyDown={handleEnterKey}  aria-invalid={Boolean(revIssues.zins)} />
+{revIssues.zins && <small role="alert" className="validation-message">{revIssues.zins}</small>}
                         <span className="input-suffix">%</span>
                       </div>
                     </div>
@@ -2154,7 +2198,8 @@ export default function Home() {
                     <div className="input-group input-optional">
                       <label htmlFor="reverse-repayment">Tilgung</label>
                       <div className={`input-wrapper ${isFlashActive ? 'flash-update' : ''} ${syncedFields.tilgung ? 'input-synced' : ''}`}>
-                        <input id="reverse-repayment" inputMode="decimal" type="text" value={rev.tilgung} onChange={(e) => updateRev("tilgung", e.target.value)} onBlur={() => handleBlurRev("tilgung")} onKeyDown={handleEnterKey} />
+                        <input id="reverse-repayment" inputMode="decimal" type="text" value={rev.tilgung} onChange={(e) => updateRev("tilgung", e.target.value)} onBlur={() => handleBlurRev("tilgung")} onKeyDown={handleEnterKey}  aria-invalid={Boolean(revIssues.tilgung)} />
+{revIssues.tilgung && <small role="alert" className="validation-message">{revIssues.tilgung}</small>}
                         <span className="input-suffix">%</span>
                       </div>
                     </div>
@@ -2163,7 +2208,7 @@ export default function Home() {
               </section>
             </CollapsibleSection>
 
-            <section className="results-sticky">
+            <section className="results-sticky" hidden={criticalInputError}>
               <CollapsibleSection
                 title="Kaufpreis bei Zielvorgabe"
                 icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>}

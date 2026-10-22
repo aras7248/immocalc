@@ -601,7 +601,7 @@ export default function Home() {
     let worker: Awaited<ReturnType<(typeof import("tesseract.js"))["createWorker"]>> | null = null;
     try {
       const { createWorker } = await import("tesseract.js");
-      worker = await createWorker('deu');
+      worker = await createWorker('deu', 1, {workerPath:'/ocr/worker.min.js',corePath:'/ocr/core',langPath:'/ocr/lang',workerBlobURL:false});
       const { data: { text } } = await worker.recognize(file);
 
       processOcrText(text);
@@ -2269,7 +2269,7 @@ export default function Home() {
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
               Erkannte Werte prüfen
             </h2>
-            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>Diese Werte wurden aus dem Bild erkannt. Sie werden erst nach deiner Bestätigung übernommen.</p>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>Das Bild verlässt bei der Texterkennung deinen Browser nicht. Diese Werte wurden aus dem Bild erkannt. Sie werden erst nach deiner Bestätigung übernommen.</p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
               {scanResult.kaufpreis && (

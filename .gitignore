@@ -44,3 +44,6 @@ next-env.d.ts
 .vercel
 
 !.env.example
+
+# Reproducible OCR build assets
+/public/ocr/

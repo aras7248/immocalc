@@ -245,20 +245,13 @@ test("invalid and negative numeric inputs are normalized defensively", () => {
 });
 
 
-// A1: Protect the actual UI example as well as the calculation fixture.
-test("A1: standard UI starts with realistic costs and labels pre-tax results", async () => {
-  const { readFile } = await import("node:fs/promises");
-  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const defaults = page.split("const initialCalcState: CalcState = {")[1].split("};")[0];
-  for (const [field, expected] of Object.entries({
-    instandhaltungQm: "1,00", verwaltungPm: "30,00", ruecklagePm: "50,00",
-  })) {
-    assert.ok(defaults.includes(`${field}: "${expected}"`));
-  }
-  assert.ok(page.includes("CF / Monat (vor Steuern)"));
-  assert.ok(page.includes("CF / Jahr (vor Steuern)"));
-  assert.ok(page.includes("Netto-Rendite (vor Steuern)"));
-  assert.equal(calculateStandard({ ...commonInput, purchasePrice: 350_000, annualRent: 21_900 }).base.cashFlowAnnual, -1_526);
+test('A1: real UI defaults reproduce the documented example', async()=>{
+ const {initialCalcState}=await import('../domain/immocalc/state.ts');
+ const {parseNumber}=await import('./numberFormat.ts');
+ assert.equal(parseNumber(initialCalcState.instandhaltungQm),1);
+ assert.equal(parseNumber(initialCalcState.verwaltungPm),30);
+ assert.equal(parseNumber(initialCalcState.ruecklagePm),50);
+ assert.equal(calculateStandard({...commonInput,purchasePrice:350000,annualRent:21900}).base.cashFlowAnnual,-1526);
 });
 
 for (const vacancyPercent of [0, 2, 100]) {

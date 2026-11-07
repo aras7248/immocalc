@@ -117,7 +117,8 @@ export function criticalQuestions(input: ValuationInput, review: ImportReview | 
   if (!(input.askingPrice>0)) missing.push("Bitte den Kaufpreis bestätigen.");
   if (!(input.year>0)) missing.push("Bitte das Baujahr bestätigen.");
   if (!occupancy) missing.push("Bitte die Nutzung der Immobilie angeben.");
-  if (occupancy==="vermietet" && !(input.annualRent>0)) missing.push("Bitte die tatsächlich gezahlte Kaltmiete angeben.");
+  if (!(input.annualRent>0)) missing.push(occupancy==="vermietet" ? "Bitte die tatsächlich gezahlte Kaltmiete angeben." : "Bitte eine geplante Kaltmiete angeben und als Schätzung prüfen.");
+  if (!input.remarks.trim()) missing.push("Bitte den bekannten Zustand und größere Reparaturen beschreiben – oder ausdrücklich „unbekannt“ eintragen.");
   if (!Number.isFinite(input.interest) || !Number.isFinite(input.repayment) || input.interest + input.repayment<=0)
     missing.push("Bitte gültige Werte für Zins und Tilgung angeben.");
   return missing;

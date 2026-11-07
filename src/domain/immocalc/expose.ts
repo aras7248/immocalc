@@ -81,7 +81,8 @@ export function reviewExpose(doc: ExposeImport): ImportReview {
   if (address) updates.address=address;
   const type=find("type");
   if (type && /mehrfamilienhaus|eigentumswohnung|einfamilienhaus/i.test(type)) {
-    updates.type=(type.match(/mehrfamilienhaus|eigentumswohnung|einfamilienhaus/i)||[])[0].replace(/^./,c=>c.toUpperCase());
+    const match=type.match(/mehrfamilienhaus|eigentumswohnung|einfamilienhaus/i);
+    if(match) updates.type=match[0].replace(/^./,c=>c.toUpperCase());
   }
   for (const [key,target] of [["area","area"],["year","year"],["askingPrice","askingPrice"]] as const) {
     const raw=find(key), n=raw?numberValue(raw):null;

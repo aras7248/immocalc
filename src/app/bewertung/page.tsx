@@ -53,12 +53,27 @@ export default function BewertungPage() {
     setForm(old=>({...old,[field]:value}));
     if(["address","area","year","askingPrice","annualRent"].includes(field))setConfirmed(false);
   };
-  const onExposeComplete=(doc:ExposeImport,report:ImportReview)=>{
-    setExpose(doc);setReview(report);setResolved([]);setConfirmed(false);
+  const onExposeComplete=(doc:ExposeImport,_report:ImportReview)=>{
+    const offset=expose?.pageCount||0;
+    const incoming=doc.pages.map(p=>({
+      ...p,page:p.page+offset,sourceFile:doc.filename,
+      facts:p.facts.map(f=>({...f,page:f.page+offset,sourceFile:doc.filename}))
+    }));
+    const combined:ExposeImport=expose?{
+      filename:expose.filename+" + "+doc.filename,
+      pageCount:expose.pageCount+doc.pageCount,
+      pages:[...expose.pages,...incoming],createdAt:new Date().toISOString()
+    }:{...doc,pages:incoming};
+    const report=reviewExpose(combined);
+    setExpose(combined);setReview(report);setResolved([]);setConfirmed(false);
     setForm(old=>({...old,...report.updates}));
     const item=report.findings.find(f=>f.key==="occupancy");
     const v=item?.value.toLowerCase()||"";
     setOccupancy(v.includes("vermietet")?"vermietet":v.includes("leer")?"leer":v.includes("eigen")?"eigengenutzt":"");
+  };
+  const resetExpose=()=>{
+    if(user) localStorage.removeItem("immocalc_expose_"+user.id);
+    setForm(initial);setExpose(null);setReview(null);setResolved([]);setOccupancy("");setConfirmed(false);
   };
   const numberField = (name: string, key: keyof ValuationInput, hint?: string) => (
     <label className="valuation-field"><span>{name}</span>
@@ -90,6 +105,7 @@ export default function BewertungPage() {
       <div style={{display:"flex",gap:12,alignItems:"center"}}><Link href="/">Zum Rechner</Link><button type="button" className="valuation-btn" disabled={!canAnalyze} onClick={()=>window.print()}>Bericht als PDF</button></div>
     </header>
     <ExposeUpload loaded={expose} review={review} onComplete={onExposeComplete}/>
+    {expose&&<div className="valuation-inputs" style={{marginBottom:14}}><button type="button" onClick={resetExpose} style={{background:"none",border:"1px solid var(--glass-border)",borderRadius:10,padding:"8px 12px",color:"var(--text-muted)",cursor:"pointer"}}>Neue Bewertung beginnen und lokale Exposé-Daten löschen</button></div>}
     <div className="valuation-columns">
       <section className="valuation-inputs">
         <div className="valuation-card"><h2>2. Die Immobilie</h2><div className="valuation-grid">

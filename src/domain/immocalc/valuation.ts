@@ -45,7 +45,7 @@ export function evaluateProperty(data: ValuationInput): ValuationResult {
   if (!positive(data.interest + data.repayment)) warnings.push("Zins und Tilgung müssen zusammen größer als 0 sein.");
 
   const comparisons = data.comparisonPricesPerSqm.filter(positive);
-  const sourced = comparisons.filter((_, i) => !!data.comparisonSources[i]?.trim());
+  const sourced = data.comparisonPricesPerSqm.filter((price, i) => positive(price) && !!data.comparisonSources[i]?.trim());
   if (comparisons.length < 3) warnings.push("Für einen Marktvergleich fehlen noch mindestens drei passende Vergleichsangebote.");
   if (sourced.length !== comparisons.length) warnings.push("Für alle Vergleichsangebote bitte eine Quelle eintragen.");
   warnings.push("Vergleichsangebote sind keine nachgewiesenen Verkaufspreise. Zustand, Lage und Ausstattung müssen vergleichbar sein.");
@@ -89,6 +89,6 @@ export function evaluateProperty(data: ValuationInput): ValuationResult {
   return {
     comparisonRange, investmentLimit,
     offerDifference: comparisonRange ? round(data.askingPrice - comparisonRange.middle) : null,
-    finance, warnings, status: "Vorläufig",
+    finance, warnings, status: !positive(data.askingPrice) || !positive(data.area) || !data.address.trim() ? "Unvollständig" : "Vorläufig",
   };
 }

@@ -6,9 +6,11 @@ export type ExposeFact = {
   value: string;
   evidence: string;
   page: number;
+  sourceFile?: string;
 };
 export type ExposePage = {
   page: number;
+  sourceFile?: string;
   status: "read" | "unreadable";
   summary: string;
   facts: ExposeFact[];

@@ -1,4 +1,4 @@
-import type { ValuationInput } from "./valuation";
+import type { ValuationInput } from "./valuation.ts";
 
 export type ExposeFact = {
   key: string;

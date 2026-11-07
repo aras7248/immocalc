@@ -1,4 +1,4 @@
-import { calculateReverse, calculateStandard, type FederalStateCode } from "../../lib/calculations";
+import { calculateReverse, calculateStandard, type FederalStateCode } from "../../lib/calculations.ts";
 
 export interface ValuationInput {
   address: string;

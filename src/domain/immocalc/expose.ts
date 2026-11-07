@@ -15,10 +15,13 @@ export type ExposePage = {
   summary: string;
   facts: ExposeFact[];
 };
+export type AuditIssue = { id: string; question: string; reason: string; pages: number[]; priority: "critical" | "review"; };
+export type ExposeAudit = { complete: boolean; checkedPages: number[]; issues: AuditIssue[]; };
 export type ExposeImport = {
   filename: string;
   pageCount: number;
   pages: ExposePage[];
+  audit?: ExposeAudit;
   createdAt: string;
 };
 export type ImportReview = {
@@ -27,6 +30,8 @@ export type ImportReview = {
   conflicts: Array<{ key: string; label: string; values: string[] }>;
   questions: string[];
   complete: boolean;
+  auditIssues: AuditIssue[];
+  auditComplete: boolean;
 };
 
 export const EXPOSE_KEYS = [
@@ -66,6 +71,10 @@ export function reviewExpose(doc: ExposeImport): ImportReview {
     Array.from({length:doc.pageCount},(_,i)=>i+1).every(p=>pages.has(p)) &&
     doc.pages.every(p=>p.status === "read");
   if (!complete) questions.push("Nicht alle Seiten konnten vollständig gelesen werden. Bitte lade eine besser lesbare Datei hoch.");
+  const auditComplete=!!doc.audit?.complete && doc.audit.checkedPages.length===doc.pageCount &&
+    Array.from({length:doc.pageCount},(_,i)=>i+1).every(p=>doc.audit?.checkedPages.includes(p));
+  if (!auditComplete) questions.push("Die übergreifende KI-Prüfung ist noch nicht vollständig. Bitte die Datei erneut einlesen.");
+  const auditIssues=doc.audit?.issues||[];
   const facts = doc.pages.flatMap(p=>p.facts.filter(f=>f.page===p.page && f.value.trim() && f.evidence.trim()));
   const grouped = new Map<string,ExposeFact[]>();
   for (const fact of facts) grouped.set(fact.key,[...(grouped.get(fact.key)||[]),fact]);
@@ -106,13 +115,15 @@ export function reviewExpose(doc: ExposeImport): ImportReview {
   else if (/vermietet/i.test(occupancy) && updates.annualRent === undefined)
     questions.push("Wie hoch ist die aktuelle Kaltmiete? Bitte keine mögliche zukünftige Miete angeben.");
   if (conflicts.length) questions.push("Einige Angaben im Exposé widersprechen sich. Bitte bestätige die richtigen Werte.");
-  return {updates,findings:facts,conflicts,questions,complete};
+  return {updates,findings:facts,conflicts,questions,complete,auditIssues,auditComplete};
 }
 
 /** Harte Sperre vor einer finanzbasierten Premium-Auswertung. */
 export function criticalQuestions(input: ValuationInput, review: ImportReview | null, occupancy: string): string[] {
   const missing:string[]=[];
   if (review && !review.complete) missing.push("Das Exposé wurde nicht auf allen Seiten gelesen.");
+  if (review && !review.auditComplete) missing.push("Die logische KI-Prüfung ist nicht vollständig.");
+  for(const issue of review?.auditIssues||[]) if(issue.priority==="critical") missing.push(issue.question);
   if (review?.conflicts.length) missing.push("Widersprüchliche Angaben aus dem Exposé müssen geklärt werden.");
   if (!input.address.trim()) missing.push("Bitte die genaue Adresse angeben.");
   if (!(input.area>0)) missing.push("Bitte die Wohnfläche bestätigen.");

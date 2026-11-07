@@ -45,7 +45,11 @@ export default function BewertungPage() {
     try{localStorage.setItem("immocalc_expose_"+user.id,JSON.stringify({form,expose,occupancy,resolved}));}
     catch{/* Speichern im Browser ist nicht immer verfügbar. */}
   },[user,loaded,form,expose,occupancy,resolved]);
-  const remainingReview=review?{...review,conflicts:review.conflicts.filter(c=>!resolved.includes(c.key))}:null;
+  const remainingReview=review?{
+    ...review,
+    conflicts:review.conflicts.filter(c=>!resolved.includes("conflict:"+c.key)),
+    auditIssues:review.auditIssues.filter(issue=>!resolved.includes("audit:"+issue.id))
+  }:null;
   const questions=criticalQuestions(form,remainingReview,occupancy);
   const canAnalyze=confirmed&&questions.length===0;
   const result=useMemo(()=>canAnalyze?evaluateProperty(form):null,[form,canAnalyze]);
@@ -59,11 +63,21 @@ export default function BewertungPage() {
       ...p,page:p.page+offset,sourceFile:doc.filename,
       facts:p.facts.map(f=>({...f,page:f.page+offset,sourceFile:doc.filename}))
     }));
+    const incomingAudit=doc.audit?{
+      ...doc.audit,checkedPages:doc.audit.checkedPages.map(page=>page+offset),
+      issues:doc.audit.issues.map(issue=>({...issue,id:"doc"+offset+"-"+issue.id,pages:issue.pages.map(page=>page+offset)}))
+    }:undefined;
     const combined:ExposeImport=expose?{
       filename:expose.filename+" + "+doc.filename,
       pageCount:expose.pageCount+doc.pageCount,
-      pages:[...expose.pages,...incoming],createdAt:new Date().toISOString()
-    }:{...doc,pages:incoming};
+      pages:[...expose.pages,...incoming],
+      audit:{
+        complete:!!expose.audit?.complete&&!!incomingAudit?.complete,
+        checkedPages:[...(expose.audit?.checkedPages||[]),...(incomingAudit?.checkedPages||[])],
+        issues:[...(expose.audit?.issues||[]),...(incomingAudit?.issues||[])]
+      },
+      createdAt:new Date().toISOString()
+    }:{...doc,pages:incoming,audit:incomingAudit};
     const report=reviewExpose(combined);
     setExpose(combined);setReview(report);setResolved([]);setConfirmed(false);
     setForm(old=>({...old,...report.updates}));
@@ -120,9 +134,17 @@ export default function BewertungPage() {
             </select>
           </label>
           <p className="valuation-muted">Bei vermieteten Objekten zählt die aktuelle Kaltmiete, sonst eine geplante Miete. Bitte nicht vermischen.</p>
+          {review?.auditIssues.map(issue=><div key={issue.id} className="valuation-notice">
+            <strong>{issue.priority==="critical"?"Wichtige Frage":"Weitere Rückfrage"}</strong>
+            <p>{issue.question}</p><p className="valuation-muted">{issue.reason} (Seite {issue.pages.join(", ")})</p>
+            {issue.priority==="critical"&&<label><input type="checkbox"
+              checked={resolved.includes("audit:"+issue.id)}
+              onChange={e=>{setResolved(old=>e.target.checked?[...old,"audit:"+issue.id]:old.filter(k=>k!=="audit:"+issue.id));setConfirmed(false);}}/>
+              Ich habe diese Frage geklärt und die Angaben korrigiert oder ergänzt.</label>}
+          </div>)}
           {review?.conflicts.map(c=><div key={c.key} className="valuation-notice">
             <strong>Widersprüchliche Angabe: {c.label}</strong><p>{c.values.join(" / ")}</p>
-            <label><input type="checkbox" checked={resolved.includes(c.key)} onChange={e=>{setResolved(old=>e.target.checked?[...old,c.key]:old.filter(k=>k!==c.key));setConfirmed(false);}}/> Richtigen Wert oben geprüft und eingetragen</label>
+            <label><input type="checkbox" checked={resolved.includes("conflict:"+c.key)} onChange={e=>{setResolved(old=>e.target.checked?[...old,"conflict:"+c.key]:old.filter(k=>k!=="conflict:"+c.key));setConfirmed(false);}}/> Richtigen Wert oben geprüft und eingetragen</label>
           </div>)}
           </div>
         <div className="valuation-card"><h2>3. Ähnliche Immobilien</h2>

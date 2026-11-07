@@ -4,7 +4,7 @@ import { criticalQuestions, reviewExpose, type ExposeImport } from "./expose.ts"
 import type { ValuationInput } from "./valuation.ts";
 
 const f=(key:string,value:string,page:number=1)=>({key,value,page,label:key,evidence:value});
-const doc=(pages:ExposeImport["pages"],count=pages.length):ExposeImport=>({filename:"Test.pdf",pageCount:count,pages,createdAt:"2026-11-07T00:00:00Z"});
+const doc=(pages:ExposeImport["pages"],count=pages.length):ExposeImport=>({filename:"Test.pdf",pageCount:count,pages,audit:{complete:true,checkedPages:pages.map(p=>p.page),issues:[]},createdAt:"2026-11-07T00:00:00Z"});
 const sample:ValuationInput={
   address:"Beispielweg 1, Teststadt",type:"Mehrfamilienhaus",area:100,year:1995,askingPrice:250000,annualRent:12000,
   comparisonPricesPerSqm:[],comparisonSources:[],federalState:"NRW",interest:4,repayment:1.5,
@@ -46,4 +46,21 @@ test("Widersprüche bei Kaufpreisen dürfen nicht automatisch überschrieben wer
 test("Bei vermieteten Immobilien darf die Ist-Miete nicht fehlen",()=>{
   const report=reviewExpose(doc([{page:1,status:"read",summary:"",facts:[]}]));
   assert.ok(criticalQuestions({...sample,annualRent:0},report,"vermietet").some(q=>q.includes("Kaltmiete")));
+});
+
+test("Kritische KI-Frage verhindert die Bewertung, bis sie geklärt wird",()=>{
+  const report=reviewExpose({...doc([{page:1,status:"read",summary:"",facts:[]}]),audit:{
+    complete:true,checkedPages:[1],issues:[{id:"issue-1",question:"Ist der Wohnflächenwert durch eine Berechnung belegt?",reason:"Unterschiedliche Quellen",pages:[1],priority:"critical"}]
+  }});
+  assert.ok(criticalQuestions(sample,report,"vermietet").some(q=>q.includes("Wohnflächenwert")));
+  const cleared={...report,auditIssues:[]};
+  assert.ok(!criticalQuestions({...sample,remarks:"Zustand unbekannt"},cleared,"vermietet").some(q=>q.includes("Wohnflächenwert")));
+});
+
+test("Fehlende übergreifende Kontrolle sperrt die Freigabe",()=>{
+  const source=doc([{page:1,status:"read",summary:"",facts:[]}]);
+  delete source.audit;
+  const review=reviewExpose(source);
+  assert.equal(review.auditComplete,false);
+  assert.ok(criticalQuestions(sample,review,"vermietet").some(q=>q.includes("KI-Prüfung")));
 });

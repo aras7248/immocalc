@@ -136,6 +136,10 @@ async function auditPages(pages:ExposePage[],key:string):Promise<ExposeAudit> {
   return {complete:checkedPages.length===pages.length,checkedPages,issues};
 }
 
+export function GET(){
+  return NextResponse.json({ready:!!process.env.OPENAI_API_KEY},{headers:{"Cache-Control":"private, no-store"}});
+}
+
 export async function POST(req:NextRequest) {
   const authorization=req.headers.get("authorization")||"";
   const token=authorization.startsWith("Bearer ")?authorization.slice(7):"";

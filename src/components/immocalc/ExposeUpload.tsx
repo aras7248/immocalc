@@ -25,9 +25,9 @@ export function ExposeUpload({onComplete,loaded,review}:Props) {
   };
   const readCount=loaded?.pages.filter(p=>p.status==="read").length||0;
   return <div className="valuation-card valuation-inputs">
-    <h2>1. Exposé einlesen</h2>
-    <p className="valuation-muted">Lade das Exposé hoch. Die KI prüft jede Seite einzeln und sammelt auch Angaben aus Tabellen, Fußnoten und Bildern. Danach siehst du alle erkannten Informationen und kannst sie kontrollieren.</p>
-    <label className="valuation-field"><span>Exposé auswählen (PDF oder Bild, maximal 15 MB)</span>
+    <h2>1. Exposé und Unterlagen einlesen</h2>
+    <p className="valuation-muted">Lade ein Exposé oder weitere Unterlagen hoch. Die KI prüft jede Seite einzeln – einschließlich Tabellen, Fußnoten und Bildern. Du kannst mehrere Dateien nacheinander hinzufügen. Danach kontrollierst du die erkannten Informationen.</p>
+    <label className="valuation-field"><span>Datei hinzufügen (PDF oder Bild, maximal 15 MB je Datei)</span>
       <input aria-label="Exposé hochladen" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*" disabled={busy}
         onChange={e=>{const f=e.target.files?.[0];if(f)void upload(f);e.currentTarget.value="";}}/>
     </label>
@@ -38,9 +38,9 @@ export function ExposeUpload({onComplete,loaded,review}:Props) {
       {readCount!==loaded.pageCount&&<p>Einige Seiten waren nicht lesbar. Die Premium-Bewertung bleibt deshalb gesperrt.</p>}
       <details><summary>Alle erkannten Angaben und Seiten prüfen</summary>
         {loaded.pages.map(p=><div key={p.page} style={{borderTop:"1px solid var(--glass-border)",padding:"10px 0"}}>
-          <strong>Seite {p.page} · {p.status==="read"?"Gelesen":"Nicht zuverlässig gelesen"}</strong>
+          <strong>{p.sourceFile&&<span>{p.sourceFile} · </span>}Seite {p.page} · {p.status==="read"?"Gelesen":"Nicht zuverlässig gelesen"}</strong>
           <p className="valuation-muted">{p.summary}</p>
-          {p.facts.map((f,i)=><p key={i} className="valuation-muted"><strong>{f.label}:</strong> {f.value}<br/><small>Beleg: „{f.evidence}“</small></p>)}
+          {p.facts.map((f,i)=><p key={i} className="valuation-muted"><strong>{f.label}:</strong> {f.value}<br/><small>KI-erkannte Textstelle: „{f.evidence}“</small></p>)}
         </div>)}
       </details>
     </div>}

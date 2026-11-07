@@ -64,7 +64,9 @@ Auf der Seite `/bewertung` kann ein Exposé als PDF (bis 30 Seiten, 15 MB) oder 
 
 Die App zerlegt PDF-Dateien in einzelne Seiten, lässt jede Seite von einem KI-Modell
 einschließlich Bildern und Tabellen auswerten und zeigt die erkannten Angaben mit
-Seitenzahl und Beleg an. Die Seitenzahl wird technisch geprüft. Ist auch nur eine Seite
+Seitenzahl und KI-erkannter Textstelle an. Mehrere Dokumente können nacheinander
+hochgeladen werden. Anschließend prüft die KI die erfassten Informationen nochmals
+auf Widersprüche und wichtige offene Fragen. Die Seitenzahl wird technisch geprüft. Ist auch nur eine Seite
 unlesbar, bleiben Bewertung und PDF-Ausgabe gesperrt. Erkennbare Widersprüche
 müssen ebenfalls zuerst geklärt werden.
 

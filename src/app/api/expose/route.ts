@@ -73,19 +73,28 @@ async function auditPages(pages:ExposePage[],key:string):Promise<ExposeAudit> {
     const group=pages.slice(offset,offset+4);
     if(group.some(p=>p.status!=="read"))continue;
     // Keine Fakten abschneiden: große Gruppen können einzeln geprüft werden.
-    const fragments=group.flatMap(p=>{
-      const serialized=JSON.stringify({page:p.page,summary:p.summary,facts:p.facts});
-      if(serialized.length<=45000)return [[p]];
-      return p.facts.reduce<ExposePage[][]>((acc,fact)=>{
-        let last=acc[acc.length-1];
-        if(!last||JSON.stringify(last[0].facts).length>24000){
-          last=[{...p,facts:[]}];acc.push(last);
+    const toAudit:ExposePage[][]=[];
+    let current:ExposePage[]=[];
+    const flush=()=>{if(current.length){toAudit.push(current);current=[];}};
+    for(const p of group){
+      const serialized=JSON.stringify(p);
+      if(serialized.length>45000){
+        flush();
+        let slice:ExposeFact[]=[];
+        for(const fact of p.facts){
+          if(slice.length && JSON.stringify([...slice,fact]).length>28000){
+            toAudit.push([{...p,summary:p.summary.slice(0,600),facts:slice}]);slice=[];
+          }
+          slice.push(fact);
         }
-        last[0].facts.push(fact);return acc;
-      },[]);
-    });
-    // Immer alle Seiten und alle Fakten prüfen, auch wenn eine Seite viele Angaben hat.
-    const toAudit=fragments.length?fragments:[group];
+        toAudit.push([{...p,summary:p.summary.slice(0,600),facts:slice}]);
+      } else {
+        if(current.length && JSON.stringify([...current,p]).length>45000)flush();
+        current.push(p);
+      }
+    }
+    flush();
+    // Jeder Block enthält entweder mehrere zusammengehörige Seiten oder einen vollständigen Teil einer sehr umfangreichen Seite.
     for(const part of toAudit){
       const content=JSON.stringify(part);
       try{

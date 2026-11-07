@@ -1155,6 +1155,12 @@ export default function Home() {
         }}
       />
 
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "0.75rem" }}>
+        <a href="/bewertung" style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", padding: "0.7rem 1rem", borderRadius: "12px", background: "var(--accent-color-light)", color: "var(--accent-color)", border: "1px solid var(--glass-border)", fontWeight: 700, fontSize: "0.85rem", textDecoration: "none" }}>
+          Immobilie bewerten ↗
+        </a>
+      </div>
+
       <ActivePropertyBar
         objectName={calc.objektname}
         livingArea={calc.wohnflaeche}

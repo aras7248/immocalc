@@ -10,6 +10,8 @@ export type ExposeImportResult = {
   kaufpreis?: string;
   wohnflaeche?: string;
   mietePM?: string;
+  mietePA?: string;
+  anzahlEinheiten?: string;
   baujahr?: string;
 };
 
@@ -194,6 +196,13 @@ export const extractExposeTextData = (text: string, sourceName = "") => {
   return extractExposeData(`<title>${escapedName}</title><main>${escapedText}</main>`);
 };
 
+const extractUnitCount = (text: string): string | undefined => {
+  const explicit = /(?:Anzahl\s+(?:Wohn)?einheiten|Wohneinheiten(?:\s+gesamt)?|Anzahl Wohnungen)\s*:?\s*(\d+)\b/i.exec(text)?.[1]
+    ?? /\b(\d+)\s+(?:Wohneinheiten|Wohnungen|Mietverträge)\b/i.exec(text)?.[1]
+    ?? /\b(?:der|von)\s+(\d+)\s+Mietvertr(?:äge|ägen)\b/i.exec(text)?.[1];
+  return explicit && Number(explicit) > 0 ? explicit : undefined;
+};
+
 const extractAnnualRent = (text: string) => {
   const match = /(?:Jahresnettokaltmiete|Jahreskaltmiete|Jahresmiete|Mieteinnahmen\s*(?:p\.?\s*a\.?|pro Jahr|jährlich))\b[^€\d]{0,120}(?:€|EUR)?\s*([\d.]+(?:,\d{1,2})?)(?:,?[–—-])?\s*(?:€|EUR)?/i.exec(text);
   return match ? parseGermanNumber(match[1]) : null;
@@ -259,9 +268,7 @@ export const extractExposeFacts = (content: string, sourceName = ""): ExposeFact
   add("plotArea", "Grundstück", firstMatch(normalizedText, [
     /(?:Grundstücksgröße|Grundstück)\s*(?:ca\.?|rund)?\s*:?\s*([\d.,]+\s*(?:m²|m2|qm))/i,
   ]));
-  add("units", "Wohneinheiten", firstMatch(normalizedText, [
-    /(?:Anzahl Wohneinheiten)\s*:?\s*([^\n]{1,80})/i,
-  ]));
+  add("units", "Wohneinheiten", extractUnitCount(normalizedText));
   add("rooms", "Zimmer", firstMatch(normalizedText, [
     /(?:Anzahl Zimmer|Zimmer gesamt|Gesamtzimmer|(?<!Schlaf)\bZimmer)\s*:?\s*([\d.,]+)/i,
   ]));
@@ -360,8 +367,12 @@ export const extractExposeData = (html: string): ExposeImportResult => {
   }
   if (!result.mietePM) {
     const annualRent = extractAnnualRent(text);
-    if (annualRent !== null && annualRent > 0) result.mietePM = formatGermanNumber(annualRent / 12);
+    if (annualRent !== null && annualRent > 0) {
+      result.mietePA = formatGermanNumber(annualRent);
+      result.mietePM = formatGermanNumber(annualRent / 12);
+    }
   }
+  result.anzahlEinheiten = extractUnitCount(text);
   result.baujahr ??= firstMatch(text, [
     /(?:Baujahr|Baujahr\s+ca\.?)\s*[:\-]?\s*((?:18|19|20)\d{2})\b/i,
   ]);

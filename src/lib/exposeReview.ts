@@ -2,10 +2,12 @@ import { parseNumber } from './numbers.ts';
 import type { ExposeImportResult, ExposeFacts } from './exposeImport.ts';
 export type ReviewedExpose = ExposeImportResult & { facts?: ExposeFacts };
 const factFields: Record<string, [string, string, string]> = {
-  address: ['address', 'Adresse', ''], kaufpreis: ['purchasePrice', 'Kaufpreis', ' €'], wohnflaeche: ['livingArea', 'Wohnfläche', ' m²'], baujahr: ['yearBuilt', 'Baujahr', ''], maklerProzent: ['broker', 'Käuferprovision', ' %'], mietePM: ['monthlyRent', 'Kaltmiete / Monat', ' €'], bundesland: ['federalState', 'Bundesland', ''],
+  address: ['address', 'Adresse', ''], kaufpreis: ['purchasePrice', 'Kaufpreis', ' €'], wohnflaeche: ['livingArea', 'Wohnfläche', ' m²'], baujahr: ['yearBuilt', 'Baujahr', ''], maklerProzent: ['broker', 'Käuferprovision', ' %'], anzahlEinheiten: ['units', 'Wohneinheiten', ''], mietePA: ['annualRent', 'Jahreskaltmiete', ' €'], mietePM: ['monthlyRent', 'Kaltmiete / Monat', ' €'], bundesland: ['federalState', 'Bundesland', ''],
 };
 export function editExposeReview(previous: ReviewedExpose, field: keyof ExposeImportResult, value: string): ReviewedExpose {
   const next = { ...previous, [field]: value || undefined };
+  if (field === 'mietePM') next.mietePA = undefined;
+  if (field === 'mietePA') next.mietePM = value ? (parseNumber(value) / 12).toLocaleString('de-DE', {maximumFractionDigits: 2}) : undefined;
   if (field === 'address') next.objektname = value || undefined;
   if (field === 'maklerProzent') {
     next.hasMakler = value ? parseNumber(value) > 0 : undefined;
@@ -23,12 +25,13 @@ export function editExposeReview(previous: ReviewedExpose, field: keyof ExposeIm
   return next;
 }
 export function validateExposeReview(value: ExposeImportResult): string | null {
-  for (const [key, label, strictlyPositive] of [['kaufpreis', 'Kaufpreis', true], ['wohnflaeche', 'Wohnfläche', true], ['mietePM', 'Kaltmiete', false], ['maklerProzent', 'Käuferprovision', false]] as const) {
+  for (const [key, label, strictlyPositive] of [['kaufpreis', 'Kaufpreis', true], ['wohnflaeche', 'Wohnfläche', true], ['mietePM', 'Kaltmiete', false], ['mietePA', 'Jahreskaltmiete', false], ['maklerProzent', 'Käuferprovision', false]] as const) {
     const raw = value[key]?.trim();
     if (!raw) continue;
     if (!/^(?:(?:\d+|\d{1,3}(?:\.\d{3})+)(?:,\d+)?|\d+\.\d{1,2})$/.test(raw.replace(/\s/g, "")) || !Number.isFinite(parseNumber(raw)) || (strictlyPositive ? parseNumber(raw) <= 0 : parseNumber(raw) < 0)) return `${label}: Bitte eine gültige ${strictlyPositive ? 'positive ' : ''}Zahl eingeben oder das Feld leer lassen.`;
     if (key === 'maklerProzent' && parseNumber(raw) > 100) return 'Käuferprovision: Bitte einen Prozentsatz zwischen 0 und 100 eingeben.';
   }
+  if (value.anzahlEinheiten && (!/^\d+$/.test(value.anzahlEinheiten) || Number(value.anzahlEinheiten) < 1)) return 'Wohneinheiten: Bitte eine positive ganze Zahl eingeben.';
   if (value.baujahr && (!/^\d{4}$/.test(value.baujahr) || Number(value.baujahr) < 1800 || Number(value.baujahr) > 2100)) return 'Baujahr: Bitte eine vierstellige Jahreszahl zwischen 1800 und 2100 eingeben.';
   return null;
 }
@@ -39,7 +42,7 @@ export function syncReviewedPremium<T extends { purchasePrice: number; livingAre
     ...premium,
     ...(reviewed.kaufpreis?.trim() ? {purchasePrice: parseNumber(reviewed.kaufpreis)} : {}),
     ...(reviewed.wohnflaeche?.trim() ? {livingArea: parseNumber(reviewed.wohnflaeche)} : {}),
-    ...(reviewed.mietePM?.trim() ? {monthlyRent: parseNumber(reviewed.mietePM)} : {}),
+    ...(reviewed.mietePM?.trim() ? {monthlyRent: reviewed.mietePA?.trim() ? parseNumber(reviewed.mietePA) / 12 : parseNumber(reviewed.mietePM)} : {}),
     ...(reviewed.bundesland ? {federalState: reviewed.bundesland} : {}),
     ...(reviewed.maklerProzent?.trim() ? {brokerPercent: parseNumber(reviewed.maklerProzent)} : {}),
     ...(reviewed.hasMakler !== undefined ? {hasBroker: reviewed.hasMakler} : {}),

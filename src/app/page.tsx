@@ -853,7 +853,9 @@ export default function Home() {
     else if (reviewed.objektname && !calc.objektname.trim()) updateCalc("objektname", reviewed.objektname);
     if (reviewed.kaufpreis) updateCalc("kaufpreis", reviewed.kaufpreis);
     if (reviewed.wohnflaeche) updateCalc("wohnflaeche", reviewed.wohnflaeche);
-    if (reviewed.mietePM) updateCalc("mietePM", reviewed.mietePM);
+    if (reviewed.mietePA) updateCalc("mietePA", reviewed.mietePA);
+    else if (reviewed.mietePM) updateCalc("mietePM", reviewed.mietePM);
+    if (reviewed.anzahlEinheiten) updateCalc("anzahlEinheiten", reviewed.anzahlEinheiten);
     if (reviewed.baujahr) updateCalc("baujahr", reviewed.baujahr);
     setPremiumInput(current => current ? syncReviewedPremium(current, reviewed) : null);
     setPremiumDraftRevision(current => current + 1);
@@ -881,7 +883,7 @@ export default function Home() {
     setPremiumDraftRevision(current => current + 1);
     const importedArea = data.wohnflaeche ? parseNumber(data.wohnflaeche) : 0;
     const importedPrice = data.kaufpreis ? parseNumber(data.kaufpreis) : 0;
-    const importedRent = data.mietePM ? parseNumber(data.mietePM) : 0;
+    const importedRent = data.mietePA ? parseNumber(data.mietePA) / 12 : data.mietePM ? parseNumber(data.mietePM) : 0;
 
     setCalc(prev => ({
       ...prev,
@@ -893,7 +895,8 @@ export default function Home() {
       kaufpreis: importedPrice > 0 ? formatAcc(importedPrice) : prev.kaufpreis,
       wohnflaeche: importedArea > 0 ? formatAcc(importedArea) : prev.wohnflaeche,
       mietePM: importedRent > 0 ? formatAcc(importedRent) : prev.mietePM,
-      mietePA: importedRent > 0 ? formatAcc(importedRent * 12) : prev.mietePA,
+      mietePA: data.mietePA ?? (importedRent > 0 ? formatAcc(importedRent * 12) : prev.mietePA),
+      anzahlEinheiten: data.anzahlEinheiten ?? prev.anzahlEinheiten,
       baujahr: data.baujahr ?? prev.baujahr,
     }));
 
@@ -1110,7 +1113,7 @@ export default function Home() {
   const defaultPremiumInput: PremiumInvestmentInput = {
     purchasePrice: kaufpreis,
     livingArea: wohnflaeche,
-    monthlyRent: parseNumber(calc.mietePM),
+    monthlyRent: parseNumber(calc.mietePA) / 12,
     federalState: calc.bundesland,
     notaryPercent: parseNumber(calc.notarProzent),
     brokerPercent: parseNumber(calc.maklerProzent),
@@ -1965,7 +1968,7 @@ export default function Home() {
             purchasePrice: kaufpreis,
             livingArea: wohnflaeche,
             yearBuilt: parseNumber(calc.baujahr),
-            monthlyRent: parseNumber(calc.mietePM),
+            monthlyRent: parseNumber(calc.mietePA) / 12,
             federalState: calc.bundesland,
             notaryPercent: parseNumber(calc.notarProzent),
             brokerPercent: parseNumber(calc.maklerProzent),
@@ -3204,6 +3207,8 @@ export default function Home() {
                 ['kaufpreis', 'Kaufpreis', '€'],
                 ['wohnflaeche', 'Wohnfläche', 'm²'],
                 ['mietePM', 'Kaltmiete / Monat', '€'],
+                ['mietePA', 'Kaltmiete / Jahr', '€'],
+                ['anzahlEinheiten', 'Wohneinheiten', ''],
                 ['baujahr', 'Baujahr', ''],
               ] as const).map(([field, label, unit]) => <label key={field} htmlFor={`import-${field}`}>{label}
                 <span className="expose-review-input"><input id={`import-${field}`} type="text" inputMode={field === 'baujahr' ? 'numeric' : 'decimal'} value={scanResult[field] ?? ''} placeholder="Bisherigen Wert beibehalten" onChange={event => setScanResult(previous => previous && editExposeReview(previous, field, event.target.value))} /><span>{unit}</span></span>

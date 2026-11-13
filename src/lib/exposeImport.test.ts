@@ -81,3 +81,13 @@ test('contact addresses stay excluded and contradictory property addresses remai
   assert.equal(extractExposeTextData('Objektlage\nAnschrift: Musterweg 12+14, 33100 Beispielstadt\nObjektadresse: Hauptstraße 3, 10115 Berlin').address, undefined);
   assert.equal(extractExposeTextData('Objektanschrift: Musterweg 12 / 14\n33100 Beispielstadt').address, 'Musterweg 12 / 14, 33100 Beispielstadt');
 });
+
+test('preserves stated annual rent and recognizes the total from rental contract counts', () => {
+  const text = 'Jahresnettokaltmiete beträgt ca. e 55.000,–.\n11 der 12 Mietverträge sind zuvor abgeschlossen worden.';
+  const data = extractExposeTextData(text);
+  assert.equal(data.mietePA, '55.000');
+  assert.equal(data.mietePM, '4.583,33');
+  assert.equal(data.anzahlEinheiten, '12');
+  assert.equal(extractExposeFacts(text).facts.find(f => f.key === 'units')?.value, '12');
+  assert.equal(extractExposeTextData('Anzahl Wohneinheiten: 12').anzahlEinheiten, '12');
+});

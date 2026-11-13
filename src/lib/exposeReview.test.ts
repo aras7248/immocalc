@@ -30,3 +30,13 @@ test('confirmed import replaces stale premium values and retains premium scenari
   assert.equal(syncReviewedPremium(premium, {mietePM:'0'}).monthlyRent, 0);
   assert.equal(premium.monthlyRent, 1000);
 });
+
+test('annual rent stays exact in premium and preview edits invalidate or refresh the counterpart', () => {
+  const premium = {purchasePrice:350000,livingArea:268,monthlyRent:1000,federalState:'BW',brokerPercent:3.57,hasBroker:true};
+  const reviewed = {mietePA:'55.000', mietePM:'4.583,33', anzahlEinheiten:'12'};
+  assert.equal(syncReviewedPremium(premium, reviewed).monthlyRent * 12, 55000);
+  assert.equal(editExposeReview(reviewed, 'mietePM', '5.000').mietePA, undefined);
+  assert.equal(editExposeReview(reviewed, 'mietePA', '60.000').mietePM, '5.000');
+  assert.equal(validateExposeReview(reviewed), null);
+  assert.ok(validateExposeReview({anzahlEinheiten:'1,5'}));
+});

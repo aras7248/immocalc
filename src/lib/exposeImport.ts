@@ -150,13 +150,13 @@ const tagContentByAttribute = (html: string, attribute: string, value: string) =
 /** Only labelled property addresses or property structured data are used;
  * an unlabelled broker/contact address must never become the object address. */
 export const extractExposeAddress = (content: string): string | undefined => {
-  const street = /(?:[A-ZÄÖÜ][\p{L}.'’ -]{1,65}(?:straße|strasse|str\.|weg|platz|allee|gasse|ring|damm|ufer|chaussee)|(?:Am|An der|Im|Auf der|Unter den) [\p{L}.'’ -]{2,65})\s+\d{1,5}\s?[a-z]?(?:\s*[-/]\s*\d{1,5}\s?[a-z]?)?/iu;
+  const street = /(?:[A-ZÄÖÜ][\p{L}.'’ -]{1,65}(?:straße|strasse|str\.|weg|platz|allee|gasse|ring|damm|ufer|chaussee)|(?:Am|An der|Im|Auf der|Unter den) [\p{L}.'’ -]{2,65})\s+\d{1,5}\s?[a-z]?(?:\s*[-/+&]\s*\d{1,5}\s?[a-z]?)*/iu;
   const text = decodeHtml(content.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ").replace(/<[^>]+>/g, "\n"));
-  const candidates = uniqueValues(Array.from(text.matchAll(/(?:^|\n)\s*(?:Objektadresse|Adresse(?: des Objekts)?|Straße(?:\s*\/\s*Hausnummer)?|Strasse(?:\s*\/\s*Hausnummer)?)\s*:?\s*([^\n]+)(?:\n\s*(\d{5}[^\n]+))?/gimu)).map(match => {
+  const candidates = uniqueValues(Array.from(text.matchAll(/(?:^|\n)\s*(?:Objektadresse|Objektanschrift|Anschrift(?: des Objekts)?|Adresse(?: des Objekts)?|Straße(?:\s*\/\s*Hausnummer)?|Strasse(?:\s*\/\s*Hausnummer)?)\s*:?\s*([^\n]+)(?:\n\s*(\d{5}[^\n]+))?/gimu)).map(match => {
     const before = text.slice(0, match.index);
-    const lastContact = Math.max(before.toLowerCase().lastIndexOf("kontakt"), before.toLowerCase().lastIndexOf("ansprechpartner"), before.toLowerCase().lastIndexOf("impressum"), before.toLowerCase().lastIndexOf("makleradresse"));
-    const lastObject = Math.max(before.toLowerCase().lastIndexOf("objektadresse"), before.toLowerCase().lastIndexOf("objektdaten"));
-    if (!/Objektadresse|Adresse des Objekts/i.test(match[0]) && lastContact > lastObject) return undefined;
+    const lastContact = Math.max(before.toLowerCase().lastIndexOf("kontakt"), before.toLowerCase().lastIndexOf("ansprechpartner"), before.toLowerCase().lastIndexOf("impressum"), before.toLowerCase().lastIndexOf("makleradresse"), before.toLowerCase().lastIndexOf("so erreichen sie uns"), before.toLowerCase().lastIndexOf("aussteller"));
+    const lastObject = Math.max(before.toLowerCase().lastIndexOf("objektadresse"), before.toLowerCase().lastIndexOf("objektdaten"), before.toLowerCase().lastIndexOf("objektlage"), before.toLowerCase().lastIndexOf("lage des objekts"));
+    if (!/Objektadresse|Objektanschrift|Adresse des Objekts|Anschrift des Objekts/i.test(match[0]) && lastContact > lastObject) return undefined;
     const value = match[1].trim();
     return street.test(value) ? [value, match[2]].filter(Boolean).join(", ") : undefined;
   }));

@@ -56,3 +56,28 @@ test('explicit monthly rent takes precedence and bedrooms are not total rooms', 
   assert.equal(extractExposeFacts('Anzahl Schlafzimmer 20').facts.find(f => f.key === 'rooms'), undefined);
   assert.equal(extractExposeTextData('Kaufpreis 350.000 energieeffizient').kaufpreis, undefined);
 });
+
+
+test('object location address supports multiple house numbers and ignores broker and certificate issuer', () => {
+  const text = `Immobilienzentrum Beispielstadt
+Neuer Platz 3 | 33098 Beispielstadt | Telefon 01234
+Objektlage
+Anschrift: Musterweg 12+14, 33100 Beispielstadt
+Distanzen
+Dist. Bus 0,23 km
+Aussteller
+Anschrift: Amtsweg 42a, 33104 Beispielstadt
+So erreichen Sie uns
+Anschrift: Neuer Platz 3, 33098 Beispielstadt`;
+  const data = extractExposeTextData(text, 'expose.pdf');
+  assert.equal(data.address, 'Musterweg 12+14, 33100 Beispielstadt');
+  assert.equal(data.objektname, data.address);
+  assert.equal(data.bundesland, 'NRW');
+  assert.equal(extractExposeFacts(text).facts.find(f => f.key === 'address')?.value, data.address);
+});
+
+test('contact addresses stay excluded and contradictory property addresses remain unresolved', () => {
+  assert.equal(extractExposeTextData('Kontakt\nAnschrift: Neuer Platz 3, 33098 Beispielstadt').address, undefined);
+  assert.equal(extractExposeTextData('Objektlage\nAnschrift: Musterweg 12+14, 33100 Beispielstadt\nObjektadresse: Hauptstraße 3, 10115 Berlin').address, undefined);
+  assert.equal(extractExposeTextData('Objektanschrift: Musterweg 12 / 14\n33100 Beispielstadt').address, 'Musterweg 12 / 14, 33100 Beispielstadt');
+});

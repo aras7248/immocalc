@@ -231,33 +231,6 @@ export function createPremiumAssessmentPdf(data: PremiumAssessmentReportData): j
   y += 35;
 
   const factColumnWidth = (contentWidth - 6) / 2;
-  fill(COLORS.white);
-  draw(COLORS.line);
-  doc.setLineWidth(0.35);
-  doc.roundedRect(margin, y, factColumnWidth, 67, 3, 3, "FD");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  text(COLORS.ink);
-  doc.text("Aus dem Exposé erkannt", margin + 5, y + 8);
-  let factY = y + 15;
-  const visibleFacts = facts.slice(0, 7);
-  if (visibleFacts.length) {
-    visibleFacts.forEach((fact) => {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(6.5);
-      text(COLORS.muted);
-      doc.text(fact.label, margin + 5, factY);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(7.1);
-      text(COLORS.ink);
-      const value = doc.splitTextToSize(fact.value, factColumnWidth - 10);
-      doc.text(value, margin + 5, factY + 3.5);
-      factY += Math.max(7.7, value.length * 3.4 + 3.8);
-    });
-  } else {
-    wrapped("Noch keine strukturierten Exposé-Fakten hinterlegt.", margin + 5, factY, factColumnWidth - 10, 7.4);
-  }
-
   const warningX = margin + factColumnWidth + 6;
   fill(COLORS.surface);
   draw(COLORS.negative);
@@ -275,10 +248,85 @@ export function createPremiumAssessmentPdf(data: PremiumAssessmentReportData): j
   riskItems.slice(0, 4).forEach((warning, index) => {
     warningY = listItem(index + 1, warning, warningX + 4, warningY, factColumnWidth - 9, COLORS.ink) + 1.7;
   });
+  // Lay out every fact by its wrapped height. The first page shares space
+  // with the risk card; continuation pages use both fact columns.
+  type FactLine = { value: string; bold: boolean; advance: number };
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(6.5);
+  const factRows: FactLine[][] = facts.map((fact) => {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.5);
+    const labels: string[] = doc.splitTextToSize(fact.label, factColumnWidth - 10);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.1);
+    const values: string[] = doc.splitTextToSize(fact.value, factColumnWidth - 10);
+    const row = [
+      ...labels.map(value => ({ value, bold: true, advance: 3.5 })),
+      ...values.map(value => ({ value, bold: false, advance: 3.6 })),
+    ];
+    row[row.length - 1].advance += 2;
+    return row;
+  });
+  if (!factRows.length) factRows.push([{
+    value: "Noch keine strukturierten Exposé-Fakten hinterlegt.", bold: false, advance: 4,
+  }]);
+  let factX = margin;
+  let factTop = y;
+  let factHeight = 15;
+  let factLines: FactLine[] = [];
+  let factsContinued = false;
+  const factBottom = pageHeight - 17;
+  const drawFactCard = () => {
+    fill(COLORS.white);
+    draw(COLORS.line);
+    doc.setLineWidth(0.35);
+    doc.roundedRect(factX, factTop, factColumnWidth, Math.max(24, factHeight + 3), 3, 3, "FD");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    text(COLORS.ink);
+    doc.text(factsContinued ? "Exposé-Fakten (Fortsetzung)" : "Aus dem Exposé erkannt", factX + 5, factTop + 8);
+    let lineY = factTop + 15;
+    for (const entry of factLines) {
+      doc.setFont("helvetica", entry.bold ? "bold" : "normal");
+      doc.setFontSize(entry.bold ? 6.5 : 7.1);
+      text(entry.bold ? COLORS.muted : COLORS.ink);
+      doc.text(entry.value, factX + 5, lineY);
+      lineY += entry.advance;
+    }
+  };
+  const nextFactColumn = () => {
+    drawFactCard();
+    if (factsContinued && factX === margin) {
+      factX = warningX;
+    } else {
+      footer();
+      doc.addPage();
+      page += 1;
+      header("Exposé-Fakten", "Fortsetzung der Objekt- und Finanzierungsbasis");
+      factX = margin;
+    }
+    factsContinued = true;
+    factTop = 38;
+    factHeight = 15;
+    factLines = [];
+  };
+  for (const row of factRows) {
+    const rowHeight = row.reduce((sum, entry) => sum + entry.advance, 0);
+    // Keep normal facts together; exceptionally long values may span columns.
+    if (factLines.length && rowHeight <= factBottom - 38 - 18 && factTop + factHeight + rowHeight + 3 > factBottom) {
+      nextFactColumn();
+    }
+    for (const entry of row) {
+      if (factTop + factHeight + entry.advance + 3 > factBottom) nextFactColumn();
+      factLines.push(entry);
+      factHeight += entry.advance;
+    }
+  }
+  drawFactCard();
   footer();
 
   doc.addPage();
-  page = 2;
+  page += 1;
   header("Lage- und Marktanalyse", `${data.object.name || "Aktive Immobilie"} · Quellen und Prüfumfang`);
   y = 36;
   y = title("Lage nur auf belastbarer Grundlage einordnen", y, "Phase 2") + 6;
@@ -330,7 +378,7 @@ export function createPremiumAssessmentPdf(data: PremiumAssessmentReportData): j
   footer();
 
   doc.addPage();
-  page = 3;
+  page += 1;
   header("Zustand, Risiken und Sanierungsbedarf", `${data.object.name || "Aktive Immobilie"} · Risiko- und Unterlagenprüfung`);
   y = 36;
   y = title("Kritische Punkte vor einer Kaufentscheidung", y, "Phase 3") + 6;
@@ -358,7 +406,7 @@ export function createPremiumAssessmentPdf(data: PremiumAssessmentReportData): j
   footer();
 
   doc.addPage();
-  page = 4;
+  page += 1;
   header("Wirtschaftlichkeit und Sensitivität", `${data.object.name || "Aktive Immobilie"} · Modellrechnung`);
   y = 36;
   y = title("Drei Miet- und Cashflow-Szenarien", y, "Phase 4 und 6") + 6;
@@ -443,7 +491,7 @@ export function createPremiumAssessmentPdf(data: PremiumAssessmentReportData): j
   footer();
 
   doc.addPage();
-  page = 5;
+  page += 1;
   header("Kaufpreisbewertung und Preisrahmen", "Vergleichswert, Ertragswert und Investorenlogik");
   y = 36;
   y = title("Welche Bewertung aktuell möglich ist", y, "Phase 5") + 8;
@@ -479,7 +527,7 @@ export function createPremiumAssessmentPdf(data: PremiumAssessmentReportData): j
   footer();
 
   doc.addPage();
-  page = 6;
+  page += 1;
   header("Verhandlungsstrategie und Verkäufer-Zusammenfassung", "Sachlich, nachvollziehbar und ohne Schönrechnen");
   y = 36;
   y = title("Verhandlungsstrategie", y, "Phase 8") + 7;
@@ -519,7 +567,7 @@ export function createPremiumAssessmentPdf(data: PremiumAssessmentReportData): j
   footer();
 
   doc.addPage();
-  page = 7;
+  page += 1;
   header("Zins- und Fördercheck", "Öffentliche Referenz, Förder-Vorprüfung und Bankvergleich");
   y = 36;
   y = title("Zins und Fördermittel vor der Finanzierungszusage prüfen", y, "Finanzierungs-Addendum") + 6;

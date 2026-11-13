@@ -42,3 +42,11 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# Generated from the installed PDF parser during build
+/public/workers/pdf.worker.min.mjs
+
+# Local review artifacts and generated reports
+/.codex-audit/
+/output/
+/tmp/

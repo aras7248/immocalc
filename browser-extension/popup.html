@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ImmoCalc Import</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <span class="eyebrow">IMMOCALC · EXPOSÉ-IMPORT</span>
+      <h1>In ImmoCalc übernehmen</h1>
+      <p id="page-status" class="hint">Prüfe das aktuell geöffnete Exposé …</p>
+
+      <label for="app-url">ImmoCalc-Adresse</label>
+      <input id="app-url" type="url" inputmode="url" autocomplete="url" placeholder="http://localhost:4001/">
+      <p class="field-hint">Auf dem iPhone hier die veröffentlichte ImmoCalc-Adresse oder die Adresse deines Macs im WLAN eintragen.</p>
+
+      <button id="import-button" type="button">Exposé übernehmen</button>
+      <p id="result" role="status" aria-live="polite"></p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

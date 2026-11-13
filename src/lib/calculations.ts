@@ -2,8 +2,9 @@
  * Pure real-estate calculations used by the standard and reverse calculators.
  *
  * Financing model:
- * - the purchase price is financed in full;
- * - acquisition costs are paid from equity;
+ * - the total investment consists of purchase price plus acquisition costs;
+ * - supplied equity reduces the financed amount;
+ * - missing or zero equity means the total investment is financed;
  * - all monetary values are expressed in euros.
  */
 
@@ -44,6 +45,8 @@ export interface OperatingCostParameters {
   maintenancePerSqmMonthly: number;
   managementMonthly: number;
   reserveMonthly: number;
+  nonRecoverableHoaMonthly?: number;
+  otherOwnerCostsMonthly?: number;
 }
 
 export interface StandardCalculationInput
@@ -51,6 +54,7 @@ export interface StandardCalculationInput
     OperatingCostParameters {
   purchasePrice: number;
   annualRent: number;
+  equityAmount?: number;
   interestPercent: number;
   repaymentPercent: number;
   scenarioRentIncreasePercent?: number;
@@ -61,6 +65,7 @@ export interface ReverseCalculationInput
     OperatingCostParameters {
   targetAnnualRent: number;
   offeredPurchasePrice?: number;
+  equityAmount?: number;
   interestPercent: number;
   repaymentPercent: number;
   scenarioRentIncreasePercent?: number;
@@ -78,6 +83,8 @@ export interface NormalizedOperatingCostParameters {
   maintenancePerSqmMonthly: number;
   managementMonthly: number;
   reserveMonthly: number;
+  nonRecoverableHoaMonthly: number;
+  otherOwnerCostsMonthly: number;
 }
 
 export interface NormalizedStandardCalculationInput
@@ -85,6 +92,7 @@ export interface NormalizedStandardCalculationInput
     NormalizedOperatingCostParameters {
   purchasePrice: number;
   annualRent: number;
+  equityAmount: number;
   interestPercent: number;
   repaymentPercent: number;
   scenarioRentIncreasePercent: number;
@@ -95,6 +103,7 @@ export interface NormalizedReverseCalculationInput
     NormalizedOperatingCostParameters {
   targetAnnualRent: number;
   offeredPurchasePrice: number;
+  equityAmount: number;
   interestPercent: number;
   repaymentPercent: number;
   scenarioRentIncreasePercent: number;
@@ -109,7 +118,7 @@ export interface AcquisitionCostsResult {
   notaryAmount: number;
   brokerAmount: number;
   totalAmount: number;
-  /** The acquisition costs are the equity required by this financing model. */
+  /** Acquisition costs as a common equity benchmark; actual equity is user-defined. */
   equityRequired: number;
 }
 
@@ -178,6 +187,8 @@ export interface StandardCalculationResult {
   input: NormalizedStandardCalculationInput;
   acquisitionCosts: AcquisitionCostsResult;
   totalInvestment: number;
+  equityUsed: number;
+  financingRatioPercent: number;
   financing: FinancingResult;
   operatingCosts: OperatingCostsResult;
   squareMeterValues: SquareMeterValues;
@@ -193,6 +204,8 @@ export interface ReverseCaseResult {
   maxPurchasePrice: number;
   acquisitionCosts: AcquisitionCostsResult;
   totalInvestment: number;
+  equityUsed: number;
+  financedAmount: number;
   monthlyRentPerSqm: number;
   purchasePricePerSqm: number;
   totalInvestmentPerSqm: number;
@@ -211,11 +224,44 @@ export interface ReverseOfferAnalysisResult {
   offeredPurchasePrice: number;
   acquisitionCosts: AcquisitionCostsResult;
   totalInvestment: number;
+  equityUsed: number;
+  financedAmount: number;
   requiredAnnualRent: number;
   requiredMonthlyRent: number;
   requiredMonthlyRentPerSqm: number;
   annualRentGap: number;
   isAffordableAtTargetRent: boolean;
+}
+
+export interface CashFlowTargetResult {
+  targetMonthlyCashFlow: number;
+  targetAnnualCashFlow: number;
+  currentMonthlyRent: number;
+  currentAnnualRent: number;
+  requiredMonthlyRentAtOffer: number;
+  requiredAnnualRentAtOffer: number;
+  requiredMonthlyRentPerSqmAtOffer: number;
+  monthlyRentGapAtOffer: number;
+  annualRentGapAtOffer: number;
+  requiredRentChangePercentAtOffer: number;
+  maxPurchasePriceAtCurrentRent: number;
+  totalInvestmentAtCurrentRent: number;
+}
+
+export interface CashFlowMarginTargetResult {
+  targetCashFlowMarginPercent: number;
+  currentMonthlyRent: number;
+  currentAnnualRent: number;
+  targetCashFlowMonthlyAtCurrentRent: number;
+  targetCashFlowMonthlyAtOffer: number;
+  requiredMonthlyRentAtOffer: number;
+  requiredAnnualRentAtOffer: number;
+  requiredMonthlyRentPerSqmAtOffer: number;
+  monthlyRentGapAtOffer: number;
+  annualRentGapAtOffer: number;
+  requiredRentChangePercentAtOffer: number;
+  maxPurchasePriceAtCurrentRent: number;
+  totalInvestmentAtCurrentRent: number;
 }
 
 /**
@@ -278,6 +324,8 @@ function normalizeOperatingParameters(
     ),
     managementMonthly: normalizeFiniteNonNegative(input.managementMonthly),
     reserveMonthly: normalizeFiniteNonNegative(input.reserveMonthly),
+    nonRecoverableHoaMonthly: normalizeFiniteNonNegative(input.nonRecoverableHoaMonthly ?? 0),
+    otherOwnerCostsMonthly: normalizeFiniteNonNegative(input.otherOwnerCostsMonthly ?? 0),
   };
 }
 
@@ -331,7 +379,8 @@ export function calculateOperatingCosts(
   const managementAnnual = nonNegativeResult(parameters.managementMonthly * 12);
   const reserveAnnual = nonNegativeResult(parameters.reserveMonthly * 12);
   const totalAnnual = nonNegativeResult(
-    maintenanceAnnual + managementAnnual + reserveAnnual,
+    maintenanceAnnual + managementAnnual + reserveAnnual
+      + parameters.nonRecoverableHoaMonthly * 12 + parameters.otherOwnerCostsMonthly * 12,
   );
 
   return {
@@ -344,21 +393,21 @@ export function calculateOperatingCosts(
 }
 
 function calculateFinancing(
-  purchasePrice: number,
+  principal: number,
   interestPercent: number,
   repaymentPercent: number,
 ): FinancingResult {
   const annuityPercent = nonNegativeResult(interestPercent + repaymentPercent);
   const interestAnnual = nonNegativeResult(
-    purchasePrice * (interestPercent / 100),
+    principal * (interestPercent / 100),
   );
   const repaymentAnnual = nonNegativeResult(
-    purchasePrice * (repaymentPercent / 100),
+    principal * (repaymentPercent / 100),
   );
   const annuityAnnual = nonNegativeResult(interestAnnual + repaymentAnnual);
 
   return {
-    principal: purchasePrice,
+    principal,
     interestPercent,
     repaymentPercent,
     annuityPercent,
@@ -426,7 +475,7 @@ function calculateStandardCase(
   purchasePrice: number,
   totalInvestment: number,
   livingArea: number,
-  acquisitionCostEquity: number,
+  equityUsed: number,
   operatingCosts: OperatingCostsResult,
   financing: FinancingResult,
 ): StandardCaseResult {
@@ -451,7 +500,7 @@ function calculateStandardCase(
       safeRatio(purchasePrice, annualRent),
     ),
     returnOnEquityPercent: finiteResult(
-      safeRatio(cashFlowAnnual, acquisitionCostEquity) * 100,
+      safeRatio(cashFlowAnnual, equityUsed) * 100,
     ),
     monthlyRentPerSqm: nonNegativeResult(
       safeRatio(monthlyRent, livingArea),
@@ -474,6 +523,7 @@ export function calculateStandard(
     ...operatingParameters,
     purchasePrice: normalizeFiniteNonNegative(input.purchasePrice),
     annualRent: normalizeFiniteNonNegative(input.annualRent),
+    equityAmount: normalizeFiniteNonNegative(input.equityAmount ?? 0),
     interestPercent: normalizeFiniteNonNegative(input.interestPercent),
     repaymentPercent: normalizeFiniteNonNegative(input.repaymentPercent),
     scenarioRentIncreasePercent: normalizeFiniteNonNegative(
@@ -487,8 +537,10 @@ export function calculateStandard(
   const totalInvestment = nonNegativeResult(
     normalizedInput.purchasePrice + acquisitionCosts.totalAmount,
   );
+  const equityUsed = Math.min(normalizedInput.equityAmount, totalInvestment);
+  const financedAmount = nonNegativeResult(totalInvestment - equityUsed);
   const financing = calculateFinancing(
-    normalizedInput.purchasePrice,
+    financedAmount,
     normalizedInput.interestPercent,
     normalizedInput.repaymentPercent,
   );
@@ -502,7 +554,7 @@ export function calculateStandard(
     normalizedInput.purchasePrice,
     totalInvestment,
     normalizedInput.livingArea,
-    acquisitionCosts.equityRequired,
+    equityUsed,
     operatingCosts,
     financing,
   );
@@ -511,7 +563,7 @@ export function calculateStandard(
     normalizedInput.purchasePrice,
     totalInvestment,
     normalizedInput.livingArea,
-    acquisitionCosts.equityRequired,
+    equityUsed,
     operatingCosts,
     financing,
   );
@@ -520,6 +572,10 @@ export function calculateStandard(
     input: normalizedInput,
     acquisitionCosts,
     totalInvestment,
+    equityUsed,
+    financingRatioPercent: nonNegativeResult(
+      safeRatio(financedAmount, normalizedInput.purchasePrice) * 100,
+    ),
     financing,
     operatingCosts,
     squareMeterValues: {
@@ -545,9 +601,19 @@ function calculateReverseCase(
 ): ReverseCaseResult {
   const noiAnnual = finiteResult(annualRent - operatingCosts.totalAnnual);
   const availableAnnuityAnnual = nonNegativeResult(noiAnnual);
+  const acquisitionCostPercent = nonNegativeResult(
+    getLandTransferTaxRate(normalizedInput.federalState)
+      + normalizedInput.notaryPercent
+      + normalizedInput.brokerPercent,
+  );
   const maxPurchasePrice =
     annuityPercent > 0
-      ? nonNegativeResult(availableAnnuityAnnual / (annuityPercent / 100))
+      ? nonNegativeResult(
+          (
+            availableAnnuityAnnual / (annuityPercent / 100)
+            + normalizedInput.equityAmount
+          ) / (1 + acquisitionCostPercent / 100),
+        )
       : 0;
   const acquisitionCosts = calculateAcquisitionCosts(
     maxPurchasePrice,
@@ -556,6 +622,8 @@ function calculateReverseCase(
   const totalInvestment = nonNegativeResult(
     maxPurchasePrice + acquisitionCosts.totalAmount,
   );
+  const equityUsed = Math.min(normalizedInput.equityAmount, totalInvestment);
+  const financedAmount = nonNegativeResult(totalInvestment - equityUsed);
   const monthlyRent = nonNegativeResult(annualRent / 12);
 
   return {
@@ -566,6 +634,8 @@ function calculateReverseCase(
     maxPurchasePrice,
     acquisitionCosts,
     totalInvestment,
+    equityUsed,
+    financedAmount,
     monthlyRentPerSqm: nonNegativeResult(
       safeRatio(monthlyRent, normalizedInput.livingArea),
     ),
@@ -590,6 +660,7 @@ export function calculateReverse(
     offeredPurchasePrice: normalizeFiniteNonNegative(
       input.offeredPurchasePrice ?? 0,
     ),
+    equityAmount: normalizeFiniteNonNegative(input.equityAmount ?? 0),
     interestPercent: normalizeFiniteNonNegative(input.interestPercent),
     repaymentPercent: normalizeFiniteNonNegative(input.repaymentPercent),
     scenarioRentIncreasePercent: normalizeFiniteNonNegative(
@@ -608,8 +679,18 @@ export function calculateReverse(
     normalizedInput.offeredPurchasePrice,
     normalizedInput,
   );
+  const offerTotalInvestment = nonNegativeResult(
+    normalizedInput.offeredPurchasePrice + offerAcquisitionCosts.totalAmount,
+  );
+  const offerEquityUsed = Math.min(
+    normalizedInput.equityAmount,
+    offerTotalInvestment,
+  );
+  const offerFinancedAmount = nonNegativeResult(
+    offerTotalInvestment - offerEquityUsed,
+  );
   const requiredAnnualRent = nonNegativeResult(
-    normalizedInput.offeredPurchasePrice * (annuityPercent / 100) +
+    offerFinancedAmount * (annuityPercent / 100) +
       operatingCosts.totalAnnual,
   );
   const requiredMonthlyRent = nonNegativeResult(requiredAnnualRent / 12);
@@ -633,9 +714,9 @@ export function calculateReverse(
     offerAnalysis: {
       offeredPurchasePrice: normalizedInput.offeredPurchasePrice,
       acquisitionCosts: offerAcquisitionCosts,
-      totalInvestment: nonNegativeResult(
-        normalizedInput.offeredPurchasePrice + offerAcquisitionCosts.totalAmount,
-      ),
+      totalInvestment: offerTotalInvestment,
+      equityUsed: offerEquityUsed,
+      financedAmount: offerFinancedAmount,
       requiredAnnualRent,
       requiredMonthlyRent,
       requiredMonthlyRentPerSqm: nonNegativeResult(
@@ -648,5 +729,136 @@ export function calculateReverse(
         normalizedInput.offeredPurchasePrice > 0 &&
         normalizedInput.targetAnnualRent >= requiredAnnualRent,
     },
+  };
+}
+
+/**
+ * Derives both sides of a desired cash-flow scenario:
+ * - the rent required at the offered purchase price; and
+ * - the maximum purchase price that preserves the desired cash flow at the
+ *   currently supplied rent.
+ */
+export function calculateCashFlowTarget(
+  input: ReverseCalculationInput,
+  targetMonthlyCashFlowInput: number,
+): CashFlowTargetResult {
+  const targetMonthlyCashFlow = normalizeFiniteNonNegative(
+    targetMonthlyCashFlowInput,
+  );
+  const targetAnnualCashFlow = targetMonthlyCashFlow * 12;
+  const currentResult = calculateReverse(input);
+  const currentAnnualRent = currentResult.input.targetAnnualRent;
+  const currentMonthlyRent = currentAnnualRent / 12;
+  const requiredAnnualRentAtOffer = nonNegativeResult(
+    currentResult.offerAnalysis.requiredAnnualRent + targetAnnualCashFlow,
+  );
+  const requiredMonthlyRentAtOffer = requiredAnnualRentAtOffer / 12;
+  const affordabilityRent = nonNegativeResult(
+    currentAnnualRent - targetAnnualCashFlow,
+  );
+  const affordabilityResult = calculateReverse({
+    ...input,
+    targetAnnualRent: affordabilityRent,
+    scenarioRentIncreasePercent: 0,
+  });
+
+  return {
+    targetMonthlyCashFlow,
+    targetAnnualCashFlow,
+    currentMonthlyRent,
+    currentAnnualRent,
+    requiredMonthlyRentAtOffer,
+    requiredAnnualRentAtOffer,
+    requiredMonthlyRentPerSqmAtOffer: nonNegativeResult(
+      safeRatio(requiredMonthlyRentAtOffer, currentResult.input.livingArea),
+    ),
+    monthlyRentGapAtOffer: finiteResult(
+      requiredMonthlyRentAtOffer - currentMonthlyRent,
+    ),
+    annualRentGapAtOffer: finiteResult(
+      requiredAnnualRentAtOffer - currentAnnualRent,
+    ),
+    requiredRentChangePercentAtOffer: finiteResult(
+      safeRatio(
+        requiredAnnualRentAtOffer - currentAnnualRent,
+        currentAnnualRent,
+      ) * 100,
+    ),
+    maxPurchasePriceAtCurrentRent:
+      affordabilityResult.base.maxPurchasePrice,
+    totalInvestmentAtCurrentRent:
+      affordabilityResult.base.totalInvestment,
+  };
+}
+
+/**
+ * Calculates a scalable comfort corridor as a percentage of monthly cold rent.
+ *
+ * At the offered purchase price, the required rent is solved so that the
+ * desired margin remains after operating costs and annuity:
+ * required rent = break-even rent / (1 - margin).
+ *
+ * At the current rent, the same margin is reserved as cash flow before the
+ * maximum affordable purchase price is derived.
+ */
+export function calculateCashFlowMarginTarget(
+  input: ReverseCalculationInput,
+  targetCashFlowMarginPercentInput: number,
+): CashFlowMarginTargetResult {
+  const targetCashFlowMarginPercent = Math.min(
+    95,
+    normalizeFiniteNonNegative(targetCashFlowMarginPercentInput),
+  );
+  const marginFraction = targetCashFlowMarginPercent / 100;
+  const currentResult = calculateReverse(input);
+  const currentAnnualRent = currentResult.input.targetAnnualRent;
+  const currentMonthlyRent = currentAnnualRent / 12;
+  const breakEvenMonthlyRent = currentResult.offerAnalysis.requiredMonthlyRent;
+  const requiredMonthlyRentAtOffer = marginFraction < 1
+    ? nonNegativeResult(breakEvenMonthlyRent / (1 - marginFraction))
+    : 0;
+  const requiredAnnualRentAtOffer = requiredMonthlyRentAtOffer * 12;
+  const targetCashFlowMonthlyAtOffer = nonNegativeResult(
+    requiredMonthlyRentAtOffer - breakEvenMonthlyRent,
+  );
+  const targetCashFlowMonthlyAtCurrentRent = nonNegativeResult(
+    currentMonthlyRent * marginFraction,
+  );
+  const affordabilityRent = nonNegativeResult(
+    currentAnnualRent * (1 - marginFraction),
+  );
+  const affordabilityResult = calculateReverse({
+    ...input,
+    targetAnnualRent: affordabilityRent,
+    scenarioRentIncreasePercent: 0,
+  });
+
+  return {
+    targetCashFlowMarginPercent,
+    currentMonthlyRent,
+    currentAnnualRent,
+    targetCashFlowMonthlyAtCurrentRent,
+    targetCashFlowMonthlyAtOffer,
+    requiredMonthlyRentAtOffer,
+    requiredAnnualRentAtOffer,
+    requiredMonthlyRentPerSqmAtOffer: nonNegativeResult(
+      safeRatio(requiredMonthlyRentAtOffer, currentResult.input.livingArea),
+    ),
+    monthlyRentGapAtOffer: finiteResult(
+      requiredMonthlyRentAtOffer - currentMonthlyRent,
+    ),
+    annualRentGapAtOffer: finiteResult(
+      requiredAnnualRentAtOffer - currentAnnualRent,
+    ),
+    requiredRentChangePercentAtOffer: finiteResult(
+      safeRatio(
+        requiredAnnualRentAtOffer - currentAnnualRent,
+        currentAnnualRent,
+      ) * 100,
+    ),
+    maxPurchasePriceAtCurrentRent:
+      affordabilityResult.base.maxPurchasePrice,
+    totalInvestmentAtCurrentRent:
+      affordabilityResult.base.totalInvestment,
   };
 }

@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "ImmoCalc Exposé-Import",
+  "version": "0.1.0",
+  "description": "Übernimmt sichtbare Daten aus dem aktuell geöffneten ImmoScout24-Exposé nach ImmoCalc.",
+  "permissions": ["activeTab", "storage", "tabs", "scripting"],
+  "host_permissions": ["https://www.immobilienscout24.de/*"],
+  "action": {
+    "default_title": "In ImmoCalc übernehmen",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.immobilienscout24.de/*"],
+      "js": ["content-expose.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

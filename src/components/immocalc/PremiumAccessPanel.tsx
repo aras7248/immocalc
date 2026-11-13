@@ -18,11 +18,11 @@ interface PremiumAccessPanelProps {
 }
 
 const PREMIUM_BENEFITS = [
-  "Tilgungsplan",
+  "Flexible Finanzierung",
+  "Tilgungs- und Restschuldverlauf",
   "Anschlussfinanzierung",
-  "Stressszenarien",
-  "Mehrjahresanalyse",
-  "PDF-Bericht",
+  "Mehrjahres- und Exit-Analyse",
+  "Vier Szenarien",
 ];
 
 export function PremiumAccessPanel({

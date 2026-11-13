@@ -6,6 +6,7 @@ import {
 import type { KeyboardEvent } from "react";
 
 interface ActivePropertyBarProps {
+  metrics: { label: string; value: string; tone?: "positive" | "negative" }[];
   objectName: string;
   livingArea: string;
   purchasePrice: string;
@@ -23,6 +24,7 @@ interface ActivePropertyBarProps {
 }
 
 export function ActivePropertyBar({
+  metrics,
   objectName,
   livingArea,
   purchasePrice,
@@ -112,6 +114,14 @@ export function ActivePropertyBar({
           )}
         </button>
       </div>
+      <dl className="active-property__metrics" aria-label="Kennzahlen der aktuellen Standardrechnung">
+        {metrics.map(({ label, value, tone }) => (
+          <div key={label} className="active-property__metric">
+            <dt>{label}</dt>
+            <dd className={tone ? `active-property__metric--${tone}` : undefined}>{value}</dd>
+          </div>
+        ))}
+      </dl>
     </section>
   );
 }

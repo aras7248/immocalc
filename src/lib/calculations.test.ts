@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   GRUNDERWERBSTEUER_SAETZE_2026,
+  calculateCashFlowMarginTarget,
+  calculateCashFlowTarget,
   calculateOperatingCosts,
   calculateReverse,
   calculateStandard,
@@ -53,11 +55,12 @@ test("calculates non-recoverable operating costs from all three components", () 
   assert.equal(costs.totalMonthly, 348);
 });
 
-test("standard calculation finances only the purchase price and uses acquisition costs as equity", () => {
+test("standard calculation uses explicitly entered equity to reduce the loan", () => {
   const result = calculateStandard({
     ...commonInput,
     purchasePrice: 350_000,
     annualRent: 21_900,
+    equityAmount: 42_245,
   });
 
   assert.equal(result.acquisitionCosts.totalPercent, 12.07);
@@ -67,6 +70,8 @@ test("standard calculation finances only the purchase price and uses acquisition
   closeTo(result.acquisitionCosts.totalAmount, 42_245);
   closeTo(result.acquisitionCosts.equityRequired, 42_245);
   closeTo(result.totalInvestment, 392_245);
+  closeTo(result.equityUsed, 42_245);
+  closeTo(result.financingRatioPercent, 100);
 
   assert.equal(result.financing.principal, 350_000);
   assert.equal(result.financing.interestAnnual, 14_000);
@@ -93,6 +98,37 @@ test("standard calculation finances only the purchase price and uses acquisition
       result.base.chart.repayment.percentOfRent +
       result.base.chart.positiveCashFlow.percentOfRent,
     100,
+  );
+});
+
+test("zero equity finances all acquisition costs and makes broker costs affect cash flow", () => {
+  const withoutBroker = calculateStandard({
+    ...commonInput,
+    hasBroker: false,
+    purchasePrice: 350_000,
+    annualRent: 21_900,
+    equityAmount: 0,
+  });
+  const withBroker = calculateStandard({
+    ...commonInput,
+    purchasePrice: 350_000,
+    annualRent: 21_900,
+    equityAmount: 0,
+  });
+
+  closeTo(withBroker.equityUsed, 0);
+  closeTo(withBroker.financing.principal, withBroker.totalInvestment);
+  closeTo(
+    withBroker.financingRatioPercent,
+    withBroker.totalInvestment / 350_000 * 100,
+  );
+  closeTo(
+    withBroker.financing.principal - withoutBroker.financing.principal,
+    withBroker.acquisitionCosts.brokerAmount,
+  );
+  closeTo(
+    withoutBroker.base.cashFlowMonthly - withBroker.base.cashFlowMonthly,
+    withBroker.acquisitionCosts.brokerAmount * 0.055 / 12,
   );
 });
 
@@ -140,7 +176,7 @@ test("reverse calculation subtracts operating costs before deriving the maximum 
 
   assert.equal(result.operatingCosts.totalAnnual, 4_176);
   assert.equal(result.base.availableAnnuityAnnual, 17_724);
-  closeTo(result.base.maxPurchasePrice, 17_724 / 0.055);
+  closeTo(result.base.maxPurchasePrice, 17_724 / 0.055 / 1.1207);
   closeTo(
     result.base.acquisitionCosts.totalAmount,
     result.base.maxPurchasePrice * 0.1207,
@@ -152,8 +188,30 @@ test("reverse calculation subtracts operating costs before deriving the maximum 
 
   closeTo(result.scenario.annualRent, 24_090);
   closeTo(result.scenario.availableAnnuityAnnual, 19_914);
-  closeTo(result.scenario.maxPurchasePrice, 19_914 / 0.055);
+  closeTo(result.scenario.maxPurchasePrice, 19_914 / 0.055 / 1.1207);
   assert.ok(result.scenario.maxPurchasePrice > result.base.maxPurchasePrice);
+});
+
+test("reverse calculation accounts for entered equity in affordability and offer financing", () => {
+  const result = calculateReverse({
+    ...commonInput,
+    livingArea: 100,
+    targetAnnualRent: 30_000,
+    offeredPurchasePrice: 500_000,
+    equityAmount: 60_350,
+    maintenancePerSqmMonthly: 0,
+    managementMonthly: 0,
+    reserveMonthly: 0,
+  });
+
+  closeTo(
+    result.base.maxPurchasePrice,
+    (30_000 / 0.055 + 60_350) / 1.1207,
+  );
+  closeTo(result.offerAnalysis.totalInvestment, 500_000 * 1.1207);
+  closeTo(result.offerAnalysis.equityUsed, 60_350);
+  closeTo(result.offerAnalysis.financedAmount, 500_000);
+  closeTo(result.offerAnalysis.requiredAnnualRent, 500_000 * 0.055);
 });
 
 test("operating costs reduce reverse affordability by costs divided by the annuity rate", () => {
@@ -171,7 +229,7 @@ test("operating costs reduce reverse affordability by costs divided by the annui
 
   closeTo(
     withoutCosts.base.maxPurchasePrice - withCosts.base.maxPurchasePrice,
-    4_176 / 0.055,
+    4_176 / 0.055 / 1.1207,
   );
 });
 
@@ -206,12 +264,87 @@ test("reverse offer analysis derives the required rent per square meter", () => 
     repaymentPercent: 1.5,
   });
 
-  closeTo(result.base.maxPurchasePrice, 30_000 / 0.055);
-  closeTo(result.offerAnalysis.requiredAnnualRent, 27_500);
-  closeTo(result.offerAnalysis.requiredMonthlyRent, 27_500 / 12);
-  closeTo(result.offerAnalysis.requiredMonthlyRentPerSqm, 27_500 / 12 / 100);
-  assert.equal(result.offerAnalysis.isAffordableAtTargetRent, true);
-  closeTo(result.offerAnalysis.annualRentGap, -2_500);
+  closeTo(result.base.maxPurchasePrice, 30_000 / 0.055 / 1.1207);
+  closeTo(result.offerAnalysis.financedAmount, 500_000 * 1.1207);
+  closeTo(result.offerAnalysis.requiredAnnualRent, 500_000 * 1.1207 * 0.055);
+  closeTo(
+    result.offerAnalysis.requiredMonthlyRent,
+    500_000 * 1.1207 * 0.055 / 12,
+  );
+  closeTo(
+    result.offerAnalysis.requiredMonthlyRentPerSqm,
+    500_000 * 1.1207 * 0.055 / 12 / 100,
+  );
+  assert.equal(result.offerAnalysis.isAffordableAtTargetRent, false);
+  closeTo(result.offerAnalysis.annualRentGap, 500_000 * 1.1207 * 0.055 - 30_000);
+});
+
+test("cash-flow target derives required rent and a matching purchase-price ceiling", () => {
+  const input = {
+    ...commonInput,
+    targetAnnualRent: 21_900,
+    offeredPurchasePrice: 350_000,
+    equityAmount: 0,
+  };
+  const result = calculateCashFlowTarget(input, 500);
+
+  closeTo(result.requiredAnnualRentAtOffer, 25_749.475 + 6_000);
+  closeTo(result.requiredMonthlyRentAtOffer, (25_749.475 + 6_000) / 12);
+  closeTo(
+    result.requiredMonthlyRentPerSqmAtOffer,
+    (25_749.475 + 6_000) / 12 / 268,
+  );
+  closeTo(
+    result.requiredRentChangePercentAtOffer,
+    (31_749.475 - 21_900) / 21_900 * 100,
+  );
+
+  const matchingPurchase = calculateStandard({
+    ...commonInput,
+    purchasePrice: result.maxPurchasePriceAtCurrentRent,
+    annualRent: input.targetAnnualRent,
+    equityAmount: input.equityAmount,
+  });
+
+  closeTo(matchingPurchase.base.cashFlowMonthly, 500);
+  closeTo(
+    matchingPurchase.totalInvestment,
+    result.totalInvestmentAtCurrentRent,
+  );
+});
+
+test("cash-flow margin target keeps a ten-percent comfort buffer at every scale", () => {
+  const input = {
+    ...commonInput,
+    targetAnnualRent: 21_900,
+    offeredPurchasePrice: 350_000,
+    equityAmount: 0,
+  };
+  const result = calculateCashFlowMarginTarget(input, 10);
+  const breakEvenMonthlyRent = 25_749.475 / 12;
+
+  closeTo(
+    result.requiredMonthlyRentAtOffer,
+    breakEvenMonthlyRent / 0.9,
+  );
+  closeTo(
+    result.targetCashFlowMonthlyAtOffer
+      / result.requiredMonthlyRentAtOffer,
+    0.1,
+  );
+  closeTo(result.targetCashFlowMonthlyAtCurrentRent, 1_825 * 0.1);
+
+  const matchingPurchase = calculateStandard({
+    ...commonInput,
+    purchasePrice: result.maxPurchasePriceAtCurrentRent,
+    annualRent: input.targetAnnualRent,
+    equityAmount: input.equityAmount,
+  });
+
+  closeTo(
+    matchingPurchase.base.cashFlowMonthly,
+    result.targetCashFlowMonthlyAtCurrentRent,
+  );
 });
 
 test("invalid and negative numeric inputs are normalized defensively", () => {
@@ -225,6 +358,7 @@ test("invalid and negative numeric inputs are normalized defensively", () => {
     brokerPercent: Number.POSITIVE_INFINITY,
     purchasePrice: -100_000,
     annualRent: Number.NEGATIVE_INFINITY,
+    equityAmount: -50_000,
     livingArea: -50,
     maintenancePerSqmMonthly: -1,
     managementMonthly: Number.NaN,
@@ -236,10 +370,25 @@ test("invalid and negative numeric inputs are normalized defensively", () => {
 
   assert.equal(result.input.purchasePrice, 0);
   assert.equal(result.input.annualRent, 0);
+  assert.equal(result.input.equityAmount, 0);
   assert.equal(result.input.livingArea, 0);
   assert.equal(result.acquisitionCosts.totalAmount, 0);
   assert.equal(result.financing.annuityAnnual, 0);
   assert.equal(result.base.cashFlowAnnual, 0);
   assert.equal(result.base.chart.coveragePercent, 100);
   assert.ok(Number.isFinite(result.base.netRentalYieldPercent));
+});
+
+test("additional owner costs reduce cash flow once in both calculators", () => {
+  const additionalCosts = { nonRecoverableHoaMonthly: 70, otherOwnerCostsMonthly: 20 };
+  const standardInput = { ...commonInput, purchasePrice: 350_000, annualRent: 21_900 };
+  const reverseInput = { ...commonInput, offeredPurchasePrice: 350_000, targetAnnualRent: 21_900 };
+
+  const standardBefore = calculateStandard(standardInput);
+  const standardAfter = calculateStandard({ ...standardInput, ...additionalCosts });
+  closeTo(standardAfter.base.cashFlowMonthly, standardBefore.base.cashFlowMonthly - 90);
+
+  const reverseBefore = calculateReverse(reverseInput);
+  const reverseAfter = calculateReverse({ ...reverseInput, ...additionalCosts });
+  closeTo(reverseAfter.offerAnalysis.requiredMonthlyRent, reverseBefore.offerAnalysis.requiredMonthlyRent + 90);
 });

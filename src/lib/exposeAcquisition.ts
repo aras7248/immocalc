@@ -21,6 +21,7 @@ export function extractBuyerCommission(text: string): { maklerProzent?: string; 
   let uncertain = false;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    if (/Innencourtage/i.test(line) && !/\bKäufer/i.test(line)) continue;
     if (/Verkäufer/i.test(line) && !/\bKäufer/i.test(line)) continue;
     if (/\bprovisionsfrei\b|keine\s+(?:Käuferprovision|Maklerprovision|Courtage)|(?:Käuferprovision|Maklerprovision|Courtage)\s*:?\s*(?:entfällt|keine)/i.test(line)) { free = true; continue; }
     if (!/provision|courtage|maklergebühr/i.test(line) && !/Kaufpreis.*zzgl.*%/i.test(line)) continue;

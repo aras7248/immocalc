@@ -177,8 +177,14 @@ export const extractExposeAddress = (content: string): string | undefined => {
   return unique.length === 1 ? unique[0] : undefined;
 };
 
+// Some embedded PDF fonts map the euro glyph to a standalone "e".
+// Normalize only directly beside a labelled monetary amount.
+const normalizeDocumentText = (text: string) => text
+  .replace(/(Kaufpreis\s*(?::|ca\.?)?\s*[\d.]+(?:,\d{1,2})?)\s+e\b/gi, '$1 €')
+  .replace(/\be\s+(?=\d[\d.]*,(?:\d{2}|[–—-]))/g, '€ ');
+
 export const extractExposeTextData = (text: string, sourceName = "") => {
-  const escapedText = text
+  const escapedText = normalizeDocumentText(text)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
@@ -186,6 +192,11 @@ export const extractExposeTextData = (text: string, sourceName = "") => {
   const escapedName = cleanName.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
   return extractExposeData(`<title>${escapedName}</title><main>${escapedText}</main>`);
+};
+
+const extractAnnualRent = (text: string) => {
+  const match = /(?:Jahresnettokaltmiete|Jahreskaltmiete|Jahresmiete|Mieteinnahmen\s*(?:p\.?\s*a\.?|pro Jahr|jährlich))\b[^€\d]{0,120}(?:€|EUR)?\s*([\d.]+(?:,\d{1,2})?)(?:,?[–—-])?\s*(?:€|EUR)?/i.exec(text);
+  return match ? parseGermanNumber(match[1]) : null;
 };
 
 /**
@@ -200,7 +211,7 @@ export const extractExposeFacts = (content: string, sourceName = ""): ExposeFact
       .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
       .replace(/<[^>]+>/g, "\n"))
     : content;
-  const normalizedText = text
+  const normalizedText = normalizeDocumentText(text)
     .replace(/\u00a0/g, " ")
     .replace(/[ \t]+/g, " ")
     .replace(/\n{2,}/g, "\n");
@@ -236,6 +247,8 @@ export const extractExposeFacts = (content: string, sourceName = ""): ExposeFact
     /(?:Wohngegend von)\s*([^,.\n]{3,100})/i,
   ]));
   add("purchasePrice", "Kaufpreis", purchasePrices[0]);
+  const annualRent = extractAnnualRent(normalizedText.replace(/\s+/g, " "));
+  if (annualRent !== null) add("annualRent", "Jahreskaltmiete laut Exposé", `${formatGermanNumber(annualRent)} €`);
   add("broker", "Maklercourtage", firstMatch(normalizedText, [
     /(?:Provision|Maklercourtage)[^\n]{0,60}?([\d]+(?:[,.]\d+)?\s*%[^\n]{0,35})/i,
   ]));
@@ -250,7 +263,7 @@ export const extractExposeFacts = (content: string, sourceName = ""): ExposeFact
     /(?:Anzahl Wohneinheiten)\s*:?\s*([^\n]{1,80})/i,
   ]));
   add("rooms", "Zimmer", firstMatch(normalizedText, [
-    /(?:Anzahl Zimmer|Zimmer)\s*:?\s*([\d.,]+)/i,
+    /(?:Anzahl Zimmer|Zimmer gesamt|Gesamtzimmer|(?<!Schlaf)\bZimmer)\s*:?\s*([\d.,]+)/i,
   ]));
   add("yearBuilt", "Baujahr", firstMatch(normalizedText, [
     /(?:Baujahr)\s*:?\s*((?:18|19|20)\d{2})\b/i,
@@ -269,6 +282,12 @@ export const extractExposeFacts = (content: string, sourceName = ""): ExposeFact
     /(?:Einliegerwohnung)\s*(?:ca\.?|mit)?\s*:?\s*([\d.,]+\s*(?:m²|m2|qm))/i,
   ]));
 
+  const buildingYears = uniqueValues([
+    ...allMatches(normalizedText, /Baujahr\s*:?\s*((?:18|19|20)\d{2})\b/gi),
+    ...allMatches(normalizedText, /(?:im Jahre|Baujahr)\s+((?:18|19|20)\d{2})(?=\s+(?:errichtet|erbaut))/gi),
+  ]);
+  if (buildingYears.length > 1) warnings.push(`Mehrere Gebäude-Baujahre im Exposé: ${buildingYears.join(" / ")}. Bitte je Gebäude prüfen.`);
+  if (annualRent !== null) warnings.push("Monatsmiete aus der angegebenen Jahreskaltmiete durch 12 berechnet. Enthaltene Stellplatzmieten bitte nicht zusätzlich erfassen.");
   if (addresses.length > 1) {
     warnings.push(`Abweichende Adressangaben im Exposé: ${addresses.join(" | ")}. Bitte vor jeder Markt- oder Finanzierungsprüfung klären.`);
   }
@@ -332,12 +351,16 @@ export const extractExposeData = (html: string): ExposeImportResult => {
     /(?:Wohnfläche|Wohnflaeche|Wohnfläche\s+ca\.?)\s*(?:ab|ca\.?|von)?\s*[:\-]?\s*([\d.\s]+(?:,\d{1,2})?)\s*(?:m²|m2|qm)/i,
   ]);
   const monthlyRent = valueFromText(text, [
-    /(?:Kaltmiete|monatliche\s+Miete|Mieteinnahmen\s*(?:pro\s+Monat|monatlich)?)\s*(?:ab|ca\.?|von)?\s*[:\-]?\s*([\d.\s]+(?:,\d{1,2})?)\s*(?:€|EUR)/i,
+    /\b(?:Kaltmiete|monatliche\s+Miete|Mieteinnahmen\s*(?:pro\s+Monat|monatlich)?)\s*(?:ab|ca\.?|von)?\s*[:\-]?\s*([\d.\s]+(?:,\d{1,2})?)\s*(?:€|EUR)/i,
   ]);
   // Empfehlungsanzeigen enthalten oft "Mieteinnahmen" und einen fremden
   // Kaufpreis. Solche sechsstelligen Werte sind keine Monatsmiete.
   if (monthlyRent && (parseGermanNumber(monthlyRent) ?? 0) <= 50_000) {
     result.mietePM = monthlyRent;
+  }
+  if (!result.mietePM) {
+    const annualRent = extractAnnualRent(text);
+    if (annualRent !== null && annualRent > 0) result.mietePM = formatGermanNumber(annualRent / 12);
   }
   result.baujahr ??= firstMatch(text, [
     /(?:Baujahr|Baujahr\s+ca\.?)\s*[:\-]?\s*((?:18|19|20)\d{2})\b/i,

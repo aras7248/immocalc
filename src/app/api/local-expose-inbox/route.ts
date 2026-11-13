@@ -1,3 +1,4 @@
+import { EXPOSE_FILE_SIZE_ERROR } from "@/lib/exposeFileLimits";
 import { mkdir, readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -84,7 +85,7 @@ export async function GET(request: Request) {
       return Response.json({
         directory,
         item,
-        error: "Die Datei muss zwischen 1 Byte und 12 MB groß sein.",
+        error: EXPOSE_FILE_SIZE_ERROR,
       }, { status: 422, headers: responseHeaders });
     }
 

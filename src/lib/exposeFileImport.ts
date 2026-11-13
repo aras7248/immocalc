@@ -7,7 +7,8 @@ import {
   type ExposeImportResult,
 } from "@/lib/exposeImport";
 
-export const MAX_EXPOSE_FILE_BYTES = 12 * 1024 * 1024;
+import { MAX_EXPOSE_FILE_BYTES, EXPOSE_FILE_SIZE_ERROR } from "./exposeFileLimits";
+export { MAX_EXPOSE_FILE_BYTES } from "./exposeFileLimits";
 const MAX_EXTRACTED_TEXT_LENGTH = 1_000_000;
 
 const getExtension = (name: string) => name.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] ?? "";
@@ -68,7 +69,7 @@ export async function importExposeFile({
     throw new Error("Unterstützt werden PDF, DOCX, TXT und HTML. Bilder kannst du direkt über den Scan-Button hochladen.");
   }
   if (binary.length === 0 || binary.length > MAX_EXPOSE_FILE_BYTES) {
-    throw new Error("Die Datei muss zwischen 1 Byte und 12 MB groß sein.");
+    throw new Error(EXPOSE_FILE_SIZE_ERROR);
   }
 
   const extension = getExtension(name);

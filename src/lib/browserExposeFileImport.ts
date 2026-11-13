@@ -1,18 +1,14 @@
-import { extractExposeData, extractExposeFacts, extractExposeTextData } from './exposeImport';
+import { MAX_EXPOSE_FILE_BYTES, EXPOSE_FILE_SIZE_ERROR } from './exposeFileLimits.ts';
+import { extractExposeData, extractExposeFacts, extractExposeTextData } from './exposeImport.ts';
 
-/** PDFs stay on the user's device and avoid the hosting upload limit. */
+/** Documents stay on the user's device and avoid the hosting upload limit. */
 export async function importBrowserExposeFile(file: File) {
-  if (!file.size || file.size > 12 * 1024 * 1024) throw new Error('Die Datei muss zwischen 1 Byte und 12 MB groß sein.');
-  if (/\.docx$/i.test(file.name)) {
-    if (file.size > 4 * 1024 * 1024) throw new Error('DOCX-Dateien über 4 MB bitte als PDF speichern und erneut ablegen.');
-    const body = new FormData();
-    body.append('file', file);
-    const response = await fetch('/api/expose-file-import', { method: 'POST', body });
-    if (!response.ok) throw new Error('Die DOCX-Datei konnte nicht gelesen werden. Bitte als PDF speichern und erneut versuchen.');
-    return await response.json();
-  }
+  if (!file.size || file.size > MAX_EXPOSE_FILE_BYTES) throw new Error(EXPOSE_FILE_SIZE_ERROR);
   let text: string;
-  if (/\.pdf$/i.test(file.name)) {
+  if (/\.docx$/i.test(file.name)) {
+    const { extractRawText } = await import('mammoth/mammoth.browser.js');
+    text = (await extractRawText({ arrayBuffer: await file.arrayBuffer() })).value;
+  } else if (/\.pdf$/i.test(file.name)) {
     const { PDFParse } = await import('pdf-parse');
     PDFParse.setWorker('/workers/pdf.worker.min.mjs');
     const parser = new PDFParse({ data: new Uint8Array(await file.arrayBuffer()) });

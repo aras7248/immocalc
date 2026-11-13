@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { MAX_EXPOSE_FILE_MB } from '@/lib/exposeFileLimits';
 import { importBrowserExposeFile } from '@/lib/browserExposeFileImport';
 import { folderFileKey, unseenFolderFiles } from '@/lib/exposeFolder';
 import type { ExposeFacts, ExposeImportResult } from '@/lib/exposeImport';
@@ -145,7 +146,7 @@ export function ExposeFolderImport({ busy, onImport }: { busy: boolean; onImport
     }} />
     {open && createPortal(<div className="dialog-backdrop"><section className="glass-panel scan-dialog local-inbox-dialog" role="dialog" aria-modal="true" aria-labelledby="expose-folder-title" onKeyDown={event => { if (event.key === 'Escape') setOpen(false); }}>
       <h2 id="expose-folder-title">Exposé-Ordner</h2>
-      <p>Wähle deinen Exposé-Ordner. Unterstützt werden PDF, DOCX, TXT und HTML. PDF, TXT und HTML werden auf deinem Gerät ausgelesen. Nur DOCX-Dateien werden zur Auswertung an ImmoCalc übertragen (bis 4 MB). Pro Datei sind maximal 12 MB möglich. Erkannte Werte übernimmst du erst nach Prüfung.</p>
+      <p>Wähle deinen Exposé-Ordner. Unterstützt werden PDF, DOCX, TXT und HTML. Die Dokumente werden auf deinem Gerät ausgelesen. Pro Datei sind maximal {MAX_EXPOSE_FILE_MB} MB möglich. Erkannte Werte übernimmst du erst nach Prüfung.</p>
       <code className="local-inbox-dialog__path">{directoryName}</code>
       <p className="local-inbox-dialog__hint">{canWatch ? 'Der automatische Import prüft die Dateien direkt im gewählten Ordner alle fünf Sekunden, solange diese Seite geöffnet bleibt. Nach Neuladen bitte erneut auswählen.' : 'Dieser Browser unterstützt keine laufende Ordnerüberwachung. Wähle den Ordner erneut aus, um neue oder geänderte Exposés einzulesen. Bereits erkannte Dateiversionen werden in dieser Sitzung übersprungen.'} Unterordner werden bei der einmaligen Auswahl ebenfalls eingelesen.</p>
       <p role="status">{loading ? 'Exposé wird ausgewertet …' : message}{active ? ' · Ordnerüberwachung aktiv' : ''}{queue.length ? ` · ${queue.length} Datei(en) ausstehend` : ''}</p>

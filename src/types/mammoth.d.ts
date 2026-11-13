@@ -6,3 +6,7 @@ declare module "mammoth" {
 
   export function extractRawText(input: { buffer: Buffer }): Promise<RawTextResult>;
 }
+
+declare module "mammoth/mammoth.browser.js" {
+  export function extractRawText(input: { arrayBuffer: ArrayBuffer }): Promise<{ value: string }>;
+}

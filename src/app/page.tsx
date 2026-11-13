@@ -1,5 +1,7 @@
 "use client";
 
+import { MAX_EXPOSE_FILE_BYTES, EXPOSE_FILE_SIZE_ERROR } from '@/lib/exposeFileLimits';
+import { importBrowserExposeFile } from '@/lib/browserExposeFileImport';
 import { editExposeReview, validateExposeReview, syncReviewedPremium } from '@/lib/exposeReview';
 import { FEDERAL_STATE_NAMES } from '@/lib/exposeAcquisition';
 import { ExposeFolderImport } from '@/components/immocalc/ExposeFolderImport';
@@ -772,11 +774,11 @@ export default function Home() {
     }
   };
 
-  // === Exposé-Import: Bilder werden lokal gescannt, Dokumente serverseitig ausgelesen. ===
+  // === Exposé-Import: Bilder und Dokumente werden lokal ausgelesen. ===
   const scanImageFile = async (file: File) => {
 
-    if (file.size > 12 * 1024 * 1024) {
-      alert("Das Bild ist größer als 12 MB. Bitte verkleinere es vor dem Scan.");
+    if (file.size > MAX_EXPOSE_FILE_BYTES) {
+      alert(EXPOSE_FILE_SIZE_ERROR);
       return;
     }
 
@@ -807,24 +809,14 @@ export default function Home() {
       return;
     }
 
-    if (file.size > 12 * 1024 * 1024) {
-      alert("Die Datei ist größer als 12 MB. Bitte wähle ein kleineres Exposé aus.");
+    if (file.size > MAX_EXPOSE_FILE_BYTES) {
+      alert(EXPOSE_FILE_SIZE_ERROR);
       return;
     }
 
     setIsScanning(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const response = await fetch("/api/expose-file-import", { method: "POST", body: formData });
-      const payload = await response.json() as {
-        data?: ExposeImportResult;
-        facts?: ExposeFacts;
-        error?: string;
-      };
-      if (!response.ok || !payload.data) {
-        throw new Error(payload.error ?? "Die Datei konnte nicht ausgewertet werden.");
-      }
+      const payload = await importBrowserExposeFile(file);
       setScanResult({ ...payload.data, facts: payload.facts });
     } catch (error) {
       console.error("Exposé-Dateiimport fehlgeschlagen:", error);

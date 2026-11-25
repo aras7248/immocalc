@@ -25,7 +25,8 @@
     "pdf-parse": "2.4.5",
     "react": "19.2.7",
     "react-dom": "19.2.7",
-    "tesseract.js": "^7.0.0"
+    "tesseract.js": "^7.0.0",
+    "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
     "@types/node": "^20",
